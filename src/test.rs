@@ -1,4 +1,5 @@
 use crate::prover::*;
+use crate::verifier::*;
 use crate::circuit::*;
 use halo2_base::halo2_proofs::{
     circuit::SimpleFloorPlanner,
@@ -56,6 +57,54 @@ fn simple_test() {
 }
 
 #[test]
+fn generate_and_backup_kzg_params_test() {
+    let k = 18;
+    setup_and_backup_kzg_params(k, "kzg_params.bin".to_string());
+}
+
+#[test]
+fn generate_and_backup_verification_key_test() {
+    let params = read_kzg_params("kzg_params.bin".to_string());
+    generate_verififcation_key_without_witness_and_backup(&params, "verification_key.bin".to_string());
+}
+
+#[test]
+fn verifier_sketch_test() {
+    let token_type_pub = 1u64;
+    let private_note_sum_pub =  1000u64;
+    let params = read_kzg_params("kzg_params.bin".to_string());
+    let mut proof: Vec<u8> = std::fs::read("proof.bin".to_string()).unwrap();
+    let vk_from_empty: VerifyingKey<G1Affine> = verification_key_from_path("verification_key.bin".to_string());
+    let pub_inputs = vec![Fr::from(token_type_pub), Fr::from(private_note_sum_pub)];
+    assert!(verify_proof_(&params, &proof, &vk_from_empty, pub_inputs));
+}
+
+#[test]
+fn full_test_with_backuped_params() {
+    let sk = random::<u64>();
+    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk);
+    let g = Secp256k1Affine::generator();
+    let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
+    let token_type = Fr::from(1u64);
+    let token_type_pub = 1u64;
+    let private_note_sum = Fr::from(1000u64);
+    let private_note_sum_pub =  1000u64;
+
+    let params = read_kzg_params("kzg_params.bin".to_string());
+
+    let proof = generate_proof(&params, Some(token_type), Some(private_note_sum), Some(sk), Some(pk), Some(g), token_type_pub, private_note_sum_pub);
+
+    std::fs::write("proof.bin".to_string(), proof.clone()).unwrap();
+
+    let vk_from_empty: VerifyingKey<G1Affine> = verification_key_from_path("verification_key.bin".to_string());
+    //generate_verififcation_key_without_witness(&params);
+
+    let pub_inputs = vec![Fr::from(token_type_pub), Fr::from(private_note_sum_pub)];
+    assert!(verify_proof_(&params, &proof, &vk_from_empty, pub_inputs));
+
+}
+
+#[test]
 fn full_test() {
     let sk = random::<u64>();
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk);
@@ -78,8 +127,6 @@ fn full_test() {
     let params_new  = ParamsKZG::<Bn256>::read_custom(&mut params_slice, SerdeFormat::RawBytesUnchecked).expect("Reading vkey should not fail");
 
     
-
-
     let proof = generate_proof(&params_new, Some(token_type), Some(private_note_sum), Some(sk), Some(pk), Some(g), token_type_pub, private_note_sum_pub);
     println!("proof len = {:?}", proof.len());
 

@@ -108,7 +108,6 @@ pub struct DarkDexConfig<F: PrimeField> {
 
 }
 
-
 impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
     type Config = DarkDexConfig<F>;
     type FloorPlanner = SimpleFloorPlanner;

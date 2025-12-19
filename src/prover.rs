@@ -14,6 +14,8 @@ use halo2_proofs::{
 
 use halo2_proofs::plonk::{VerifyingKey, ProvingKey};
 
+use halo2_proofs::SerdeFormat;
+
 use halo2_base::halo2_proofs::{
     arithmetic::CurveAffine,
     halo2curves::{bn256::Fr, secp256k1::{Fp, Fq, Secp256k1Affine}},
@@ -24,6 +26,21 @@ use crate::circuit::*;
 
 pub fn setup(k: u32) -> ParamsKZG<Bn256> {
     ParamsKZG::new(k)
+}
+
+pub fn setup_and_backup_kzg_params(k: u32, path: String) {
+    let params: ParamsKZG<Bn256> = ParamsKZG::new(k);
+    let mut params_buf: Vec<u8> = Vec::new();
+    let _ = params.write_custom(&mut params_buf, SerdeFormat::RawBytesUnchecked).unwrap();
+    println!("KZG params len = {:?}", params_buf.len());
+    std::fs::write(path, params_buf).unwrap();
+}
+
+pub fn read_kzg_params(path: String) -> ParamsKZG<Bn256>{
+    let mut params_buf: Vec<u8> = std::fs::read(path).unwrap();
+    let mut params_slice: &[u8] = &params_buf;
+    let params  = ParamsKZG::<Bn256>::read_custom(&mut params_slice, SerdeFormat::RawBytesUnchecked).expect("Reading vkey should not fail");
+    params
 }
 
 pub fn generate_proof_key(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>) -> Result<ProvingKey<G1Affine>, Error>{
@@ -51,4 +68,19 @@ pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private
 
     let proof: Vec<u8> = transcript.finalize();
     proof
+}
+
+pub fn generate_verififcation_key_without_witness(params: &ParamsKZG<Bn256>) -> VerifyingKey<G1Affine>{
+    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::default();
+    keygen_vk(params, &circuit).unwrap()
+}
+
+pub fn generate_verififcation_key_without_witness_and_backup(params: &ParamsKZG<Bn256>, path: String) {
+    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::default();
+    let vk_from_empty = keygen_vk(params, &circuit).unwrap();
+    let mut vk1_buf: Vec<u8> = Vec::new();
+    vk_from_empty.write(&mut vk1_buf, SerdeFormat::RawBytesUnchecked)
+    .unwrap();
+    println!("vk1_buf len = {:?}", vk1_buf.len());
+    std::fs::write(path, vk1_buf).unwrap();
 }
