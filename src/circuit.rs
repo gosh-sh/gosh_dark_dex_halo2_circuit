@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use crate::sha256::*;
+
 use halo2_base::halo2_proofs::{
     arithmetic::CurveAffine,
     halo2curves::{bn256::Fr, secp256k1::{Fp, Fq, Secp256k1Affine}},
@@ -279,10 +281,10 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
 
 #[test]
 fn simple_test() {
-    let sk = random::<u64>();
-    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk);
+    let sk_raw = random::<u64>();
+    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
     let g = Secp256k1Affine::generator();
-    
+
     let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
     let token_type = Fr::from(1u64);
     let private_note_sum = Fr::from(1000u64);
@@ -290,6 +292,14 @@ fn simple_test() {
     println!("{:?}", sk);
     println!("{:?}", pk);
     println!("{:?}", g);
+
+    let mut sk_bytes: Vec<u8> = Vec::new();
+    append_uint64(&mut sk_bytes, sk_raw);
+    println!("sk_bytes = {:?}", sk_bytes);
+
+    let sk_bytes_digest = sum256_32(&sk_bytes);
+    println!("sk_bytes_digest = {:?}", sk_bytes_digest);
+     
 
     let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum),  Some(sk), Some(pk), Some(g));
 
