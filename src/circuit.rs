@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-
+use crate::hasher::*;
 use crate::sha256::*;
 
 use halo2_base::halo2_proofs::{
@@ -34,7 +34,7 @@ use halo2_proofs::{
             strategy::SingleStrategy,
         },
     },
-    plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Error},
+    plonk::{Any, create_proof, keygen_pk, keygen_vk, verify_proof, Error},
     transcript::{TranscriptReadBuffer, TranscriptWriterBuffer, Blake2bRead, Blake2bWrite, Challenge255},
 };
 
@@ -106,7 +106,8 @@ pub struct DarkDexConfig<F: PrimeField> {
     token_type_id_internal: Column<Advice>,
     private_note_sum_internal: Column<Advice>,
     public_inputs: Column<Instance>, /** token_type_id_public_val, private_note_sum_public_val */
-    fp_chip: FpChip::<F>
+    fp_chip: FpChip::<F>,
+    //hash_base_config: CircuitConfig,
 
 }
 
@@ -152,6 +153,41 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
         meta.enable_equality(token_type_id_internal);
         meta.enable_equality(private_note_sum_internal);
         meta.enable_equality(public_inputs);
+
+        //// Sha256 part
+        
+        /* struct DevTable {
+		    s_enable: Column<Fixed>,
+            input_rlc: Column<Advice>,
+            input_len: Column<Advice>,
+            hashes_rlc: Column<Advice>,
+            is_effect: Column<Advice>,
+		}
+
+        impl SHA256Table for DevTable {
+            fn cols(&self) -> [Column<Any>; 5] {
+                [
+                    self.s_enable.into(),
+                    self.input_rlc.into(),
+                    self.input_len.into(),
+                    self.hashes_rlc.into(),
+                    self.is_effect.into(),
+                ]
+			}
+		}
+		
+		let dev_table = DevTable {
+            s_enable: meta.fixed_column(),
+            input_rlc: meta.advice_column(),
+            input_len: meta.advice_column(),
+            hashes_rlc: meta.advice_column(),
+            is_effect: meta.advice_column(),
+        };
+		
+		let chng = Expression::Constant(Fr::from(0x1000u64));
+        let hash_base_config = CircuitConfig::configure(meta, dev_table, chng);
+        */
+        /// 
         DarkDexConfig{ a, b, c,  token_type_id_internal, private_note_sum_internal, public_inputs, fp_chip}
     }
 
@@ -285,9 +321,14 @@ fn simple_test() {
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
     let g = Secp256k1Affine::generator();
 
+    let token_type_raw = 1u64;
+    let private_note_sum_raw = 1000u64;
+    let vault_rand_val_raw = 111u64;
+
     let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
-    let token_type = Fr::from(1u64);
-    let private_note_sum = Fr::from(1000u64);
+    let token_type = Fr::from(token_type_raw);
+    let private_note_sum = Fr::from(private_note_sum_raw);
+    let vault_rand_val = Fr::from(vault_rand_val_raw);
     
     println!("{:?}", sk);
     println!("{:?}", pk);
@@ -299,6 +340,32 @@ fn simple_test() {
 
     let sk_bytes_digest = sum256_32(&sk_bytes);
     println!("sk_bytes_digest = {:?}", sk_bytes_digest);
+
+    let sk_bytes_digest_bytes = sum256(&sk_bytes);
+    println!("sk_bytes_digest_bytes = {:?}", sk_bytes_digest_bytes);
+
+    let mut token_type_bytes: Vec<u8> = Vec::new();
+    append_uint64(&mut token_type_bytes, token_type_raw);
+    println!("token_type_bytes = {:?}", token_type_bytes);
+
+    let mut private_note_sum_bytes: Vec<u8> = Vec::new();
+    append_uint64(&mut private_note_sum_bytes, private_note_sum_raw);
+    println!("private_note_sum_bytes = {:?}", private_note_sum_bytes);
+
+    let mut vault_rand_val_bytes: Vec<u8> = Vec::new();
+    append_uint64(&mut vault_rand_val_bytes, vault_rand_val_raw);
+    println!("vault_rand_val_bytes = {:?}", vault_rand_val_bytes);
+
+    let mut deposit_identifier_bytes = pk.x.to_bytes().to_vec();
+    deposit_identifier_bytes.append(&mut pk.y.to_bytes().to_vec());
+    deposit_identifier_bytes.append(&mut private_note_sum_bytes);
+    deposit_identifier_bytes.append(&mut token_type_bytes);
+    deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
+    deposit_identifier_bytes.append(&mut sk_bytes_digest_bytes.to_vec());
+
+    let deposit_identifier_digest = sum256_32(&deposit_identifier_bytes);
+    println!("deposit_identifier_digest = {:?}", deposit_identifier_digest);
+    
      
 
     let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum),  Some(sk), Some(pk), Some(g));

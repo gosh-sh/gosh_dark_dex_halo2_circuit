@@ -5,9 +5,9 @@ use halo2_base::halo2_proofs::{
     dev::MockProver,
     plonk::{self, Advice, ConstraintSystem, Circuit, Column, Instance, Expression, Selector},
 };
-
+use std::marker::PhantomData;
 use halo2_proofs::circuit::Cell;
-
+use halo2_ecc::fields::PrimeField;
 
 use halo2_gadgets::sha256::{table16::*, Sha256Instructions, BLOCK_SIZE};
 use halo2_proofs::{
@@ -20,7 +20,7 @@ use halo2_proofs::{
 };
 use itertools::Itertools;
 use std::convert::TryInto;
-type BlockState = <Table16Chip as Sha256Instructions<Fr>>::State;
+//type BlockState = <Table16Chip as Sha256Instructions<F>>::State;
 
 /// u32 size for SHA256 digit
 pub const DIGEST_SIZE: usize = 8;
@@ -69,7 +69,7 @@ pub trait SHA256Table {
 
 /// CircuitConfig is the configure for SHA256 circuit
 #[derive(Clone, Debug)]
-pub struct CircuitConfig {
+pub struct CircuitConfig<F: PrimeField> {
     table16: Table16Config,
     byte_range: TableColumn,
     c_data: Column<Fixed>,
@@ -97,20 +97,20 @@ pub struct CircuitConfig {
     s_common_bytes: Selector, // mark the s_enable region except for the last 8 bytes
     s_padding_size: Selector, // mark the last 8 bytes for padding size
     s_assigned_u16: Selector, // indicate copied_data cell is a assigned u16 word
+    _marker: PhantomData<F>,
 }
 
 #[derive(Clone, Debug)]
-struct BlockInheritments {
-    s_final: AssignedBits<Fr, 1>,
-    s_padding: AssignedBits<Fr, 1>,
-    byte_counter: AssignedCell<Fr, Fr>,
-    bytes_rlc: AssignedCell<Fr, Fr>,
+struct BlockInheritments<F: PrimeField> {
+    s_final: AssignedBits<F, 1>,
+    s_padding: AssignedBits<F, 1>,
+    byte_counter: AssignedCell<F, F>,
+    bytes_rlc: AssignedCell<F, F>,
 }
 
-impl CircuitConfig {
-    fn setup_gates(&self, meta: &mut ConstraintSystem<Fr>, rnd: Expression<Fr>) {
-        let one = Expression::Constant(Fr::one());
-
+impl<F: PrimeField> CircuitConfig<F> {
+    fn setup_gates(&self, meta: &mut ConstraintSystem<F>, rnd: Expression<F>) {
+        let one = Expression::Constant(F::ONE);
         meta.create_gate("halves to rlc_byte", |meta| {
             let s_u16 = meta.query_selector(self.s_assigned_u16);
             let u16 = meta.query_advice(self.copied_data, Rotation::cur());
@@ -125,7 +125,7 @@ impl CircuitConfig {
 
             // constraint u16 in table16 with byte
             let byte_from_u16 =
-                s_u16 * (u16 - (byte.clone() * Expression::Constant(Fr::from(256u64)) + byte_next));
+                s_u16 * (u16 - (byte.clone() * Expression::Constant(F::from(256u64)) + byte_next));
 
             let byte_rlc = rlc_byte
                 - s_not_padding * (rlc_byte_prev.clone() * rnd + byte)
@@ -158,7 +158,7 @@ impl CircuitConfig {
 
             // the byte on first padding is 128 (first bit is 1)
             let padding_byte_on_change =
-                padding_change.clone() * (byte.clone() - Expression::Constant(Fr::from(128u64)));
+                padding_change.clone() * (byte.clone() - Expression::Constant(F::from(128u64)));
 
             // constraint the padding byte, notice it in fact constraint the first byte of the final
             // 64-bit integer is 0, but it is ok (we have no so large bytes for 48-bit
@@ -192,7 +192,7 @@ impl CircuitConfig {
             let padding_size_prev = meta.query_advice(self.helper, Rotation::prev());
 
             let padding_size_calc = padding_size.clone()
-                - (padding_size_prev * Expression::Constant(Fr::from(256u64)) + byte);
+                - (padding_size_prev * Expression::Constant(F::from(256u64)) + byte);
             let final_must_padded = (one.clone()
                 - meta.query_advice(self.s_padding, Rotation::cur()))
                 * is_final.clone();
@@ -204,7 +204,7 @@ impl CircuitConfig {
             let final_condition = meta.query_selector(self.s_final)
                 * (padding_size
                     - (meta.query_advice(self.byte_counter, Rotation::cur())
-                        * Expression::Constant(Fr::from(8u64))))
+                        * Expression::Constant(F::from(8u64))))
                 * is_final.clone();
 
             let u16 = meta.query_advice(self.copied_data, Rotation::cur());
@@ -279,9 +279,9 @@ impl CircuitConfig {
 
     /// Configures a circuit to include this chip.
     pub fn configure(
-        meta: &mut ConstraintSystem<Fr>,
+        meta: &mut ConstraintSystem<F>,
         sha256_table: impl SHA256Table,
-        spec_challenge: Expression<Fr>,
+        spec_challenge: Expression<F>,
     ) -> Self {
         let copied_data = meta.advice_column();
         let trans_byte = meta.advice_column();
@@ -334,6 +334,7 @@ impl CircuitConfig {
             s_common_bytes,
             s_padding_size,
             s_assigned_u16,
+            _marker: PhantomData,
         };
 
         meta.lookup("byte range checking", |meta| {
@@ -349,14 +350,14 @@ impl CircuitConfig {
     #[allow(clippy::type_complexity)]
     fn assign_message_block<'vr>(
         &self,
-        region: &mut Region<'_, Fr>,
-        msgs: impl Iterator<Item = (&'vr AssignedBits<Fr, 16>, u16)>,
+        region: &mut Region<'_, F>,
+        msgs: impl Iterator<Item = (&'vr AssignedBits<F, 16>, u16)>,
         offset: usize,
         is_final: bool,
-    ) -> Result<(Vec<AssignedBits<Fr, 16>>, Vec<AssignedCell<Fr, Fr>>), Error> {
+    ) -> Result<(Vec<AssignedBits<F, 16>>, Vec<AssignedCell<F, F>>), Error> {
         let mut out_ret = Vec::new();
         let mut out_bytes = Vec::new();
-        let mut size_calc = Value::known(Fr::zero());
+        let mut size_calc = Value::known(F::ZERO);
 
         for (i, (msg, ref_iv)) in msgs.enumerate() {
             let row = offset + i * 2;
@@ -382,7 +383,7 @@ impl CircuitConfig {
                 || "u16 message hi byte",
                 self.trans_byte,
                 row,
-                || msg.value().map(|v| Fr::from((u16::from(v) >> 8) as u64)),
+                || msg.value().map(|v| F::from((u16::from(v) >> 8) as u64)),
             )?;
 
             let bytes_lo = region.assign_advice(
@@ -391,7 +392,7 @@ impl CircuitConfig {
                 next_row,
                 || {
                     msg.value()
-                        .map(|v| Fr::from((u16::from(v) & 255u16) as u64))
+                        .map(|v| F::from((u16::from(v) & 255u16) as u64))
                 },
             )?;
 
@@ -413,7 +414,7 @@ impl CircuitConfig {
                             if i < 28 {
                                 size_calc
                             } else {
-                                size_calc.map(|v| v * Fr::from(256u64)) + byte_v.value()
+                                size_calc.map(|v| v * F::from(256u64)) + byte_v.value()
                             }
                         },
                     )?
@@ -431,8 +432,8 @@ impl CircuitConfig {
 
     fn initialize_block_head(
         &self,
-        layouter: &mut impl Layouter<Fr>,
-    ) -> Result<BlockInheritments, Error> {
+        layouter: &mut impl Layouter<F>,
+    ) -> Result<BlockInheritments<F>, Error> {
         layouter.assign_region(
             || "initialize hasher",
             |mut region| {
@@ -452,13 +453,13 @@ impl CircuitConfig {
                     || "init bytes rlc",
                     self.bytes_rlc,
                     0,
-                    Fr::zero(),
+                    F::ZERO,
                 )?;
                 let byte_counter = region.assign_advice_from_constant(
                     || "init byte counter",
                     self.byte_counter,
                     0,
-                    Fr::zero(),
+                    F::ZERO,
                 )?;
 
                 Ok(BlockInheritments {
@@ -474,12 +475,12 @@ impl CircuitConfig {
     #[allow(clippy::type_complexity)]
     fn assign_input_block(
         &self,
-        layouter: &mut impl Layouter<Fr>,
-        chng: Value<Fr>,
-        prev_block: BlockInheritments,
-        scheduled_msg: &[(AssignedBits<Fr, 16>, AssignedBits<Fr, 16>)],
+        layouter: &mut impl Layouter<F>,
+        chng: Value<F>,
+        prev_block: BlockInheritments<F>,
+        scheduled_msg: &[(AssignedBits<F, 16>, AssignedBits<F, 16>)],
         padding_pos: Option<usize>,
-    ) -> Result<BlockInheritments, Error> {
+    ) -> Result<BlockInheritments<F>, Error> {
         // if no padding or the padding is in padding size pos, this block is not final
         let is_final = if let Some(pos) = padding_pos {
             pos < 56
@@ -553,7 +554,7 @@ impl CircuitConfig {
                             .s_final
                             .value()
                             .zip(prev_block.byte_counter.value())
-                            .map(|(s_final, ref_v)| if s_final[0] { Fr::zero() } else { *ref_v })
+                            .map(|(s_final, ref_v)| if s_final[0] { F::ZERO } else { *ref_v })
                     },
                 )?;
 
@@ -566,7 +567,7 @@ impl CircuitConfig {
                             .s_final
                             .value()
                             .zip(prev_block.bytes_rlc.value())
-                            .map(|(s_final, ref_v)| if s_final[0] { Fr::zero() } else { *ref_v })
+                            .map(|(s_final, ref_v)| if s_final[0] { F::ZERO } else { *ref_v })
                     },
                 )?;
 
@@ -591,7 +592,7 @@ impl CircuitConfig {
                         || "flush s_output",
                         self.s_output,
                         row,
-                        || Value::known(Fr::zero()),
+                        || Value::known(F::ZERO),
                     )?;
                     s_padding_cell = region.assign_advice(
                         || "padding",
@@ -610,8 +611,8 @@ impl CircuitConfig {
                         self.byte_counter,
                         row,
                         || {
-                            byte_counter_cell.value()
-                                + Value::known(if now_padding { Fr::zero() } else { Fr::one() })
+                            byte_counter_cell.value().map(Clone::clone)
+                                + Value::known(if now_padding { F::from(0u64) } else { F::from(1u64)  })
                         },
                     )?;
                     bytes_rlc_cell = region.assign_advice(
@@ -645,7 +646,7 @@ impl CircuitConfig {
                         || "flush unused row",
                         col,
                         64 + header_offset,
-                        || Value::known(Fr::zero()),
+                        || Value::known(F::ZERO),
                     )?;
                 }
 
@@ -653,7 +654,7 @@ impl CircuitConfig {
                     || "flush unused row",
                     self.helper,
                     1,
-                    || Value::known(Fr::zero()),
+                    || Value::known(F::ZERO),
                 )?;
 
                 Ok(BlockInheritments {
@@ -674,12 +675,12 @@ impl CircuitConfig {
     #[allow(clippy::type_complexity)]
     fn assign_output_region(
         &self,
-        layouter: &mut impl Layouter<Fr>,
-        chng: Value<Fr>,
-        state: &[(AssignedBits<Fr, 16>, AssignedBits<Fr, 16>)],
-        input_block: &BlockInheritments,
+        layouter: &mut impl Layouter<F>,
+        chng: Value<F>,
+        state: &[(AssignedBits<F, 16>, AssignedBits<F, 16>)],
+        input_block: &BlockInheritments<F>,
         is_final: bool,
-    ) -> Result<[(AssignedBits<Fr, 16>, AssignedBits<Fr, 16>); 8], Error> {
+    ) -> Result<[(AssignedBits<F, 16>, AssignedBits<F, 16>); 8], Error> {
         let output_cells = layouter.assign_region(
             || "sha256 digest",
             |mut region| {
@@ -693,19 +694,19 @@ impl CircuitConfig {
                     || "header padding",
                     self.s_padding,
                     0,
-                    Fr::zero(),
+                    F::ZERO,
                 )?;
                 region.assign_advice_from_constant(
                     || "header counter",
                     self.byte_counter,
                     0,
-                    Fr::zero(),
+                    F::ZERO,
                 )?;
                 let mut digest_rlc = region.assign_advice_from_constant(
                     || "header rlc",
                     self.bytes_rlc,
                     0,
-                    Fr::zero(),
+                    F::ZERO,
                 )?;
 
                 let header_offset = 1;
@@ -727,13 +728,13 @@ impl CircuitConfig {
                         || "set s_output for init_iv",
                         self.s_output,
                         row,
-                        || Value::known(Fr::from(Self::IV16[i / 2] as u64)),
+                        || Value::known(F::from(Self::IV16[i / 2] as u64)),
                     )?;
                     region.assign_advice(
                         || "byte counter",
                         self.byte_counter,
                         row,
-                        || Value::known(Fr::from(i as u64 + 1)),
+                        || Value::known(F::from(i as u64 + 1)),
                     )?;
                     region.assign_advice(
                         || "final",
@@ -754,14 +755,14 @@ impl CircuitConfig {
                             || "dummy padding last",
                             self.s_padding,
                             row,
-                            Fr::zero(),
+                            F::ZERO,
                         )?;
                     } else {
                         region.assign_advice(
                             || "dummy padding",
                             self.s_padding,
                             row,
-                            || Value::known(Fr::zero()),
+                            || Value::known(F::ZERO),
                         )?;
                     }
                 }
@@ -772,7 +773,7 @@ impl CircuitConfig {
                     || "mark s_output final",
                     self.s_output,
                     final_row,
-                    || Value::known(Fr::one()),
+                    || Value::known(F::ONE),
                 )?;
                 digest_rlc.copy_advice(
                     || "copy digest rlc",
@@ -804,7 +805,7 @@ impl CircuitConfig {
                         || "flush unused row",
                         col,
                         final_row,
-                        || Value::known(Fr::zero()),
+                        || Value::known(F::ZERO),
                     )?;
                 }
 
@@ -812,7 +813,7 @@ impl CircuitConfig {
                     || "flush unused row",
                     self.helper,
                     0,
-                    || Value::known(Fr::zero()),
+                    || Value::known(F::ZERO),
                 )?;
 
                 Ok(export_cells
@@ -825,7 +826,7 @@ impl CircuitConfig {
         Ok(output_cells.try_into().unwrap())
     }
 
-    fn initialize_constant_table(&self, layouter: &mut impl Layouter<Fr>) -> Result<(), Error> {
+    fn initialize_constant_table(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
         layouter.assign_table(
             || "byte range constant",
             |mut tb| {
@@ -834,7 +835,7 @@ impl CircuitConfig {
                         || "byte range",
                         self.byte_range,
                         i,
-                        || Value::known(Fr::from(i as u64)),
+                        || Value::known(F::from(i as u64)),
                     )?;
                 }
 
@@ -846,16 +847,16 @@ impl CircuitConfig {
 
 /// sha256 hasher for byte stream
 #[derive(Debug)]
-pub struct Hasher {
-    chip: CircuitConfig,
-    state: BlockState,
-    hasher_state: BlockInheritments,
+pub struct Hasher<F: PrimeField> {
+    chip: CircuitConfig<F>,
+    state: <Table16Chip as Sha256Instructions<F>>::State,
+    hasher_state: BlockInheritments<F>,
     cur_block: Vec<u8>,
     length: usize,
     block_usage: usize,
 }
 
-impl Hasher {
+impl<F: PrimeField> Hasher<F>  {
     /// return the number of 512-bit blocks which has been assigned
     pub fn blocks(&self) -> usize {
         self.block_usage
@@ -867,12 +868,12 @@ impl Hasher {
     }
 
     /// create a hasher, the circuit would be identify when block_usage is the same
-    pub fn new(chip: CircuitConfig, layouter: &mut impl Layouter<Fr>) -> Result<Self, Error> {
+    pub fn new(chip: CircuitConfig<F>, layouter: &mut impl Layouter<F>) -> Result<Self, Error> {
         // constant part
         chip.initialize_constant_table(layouter)?;
         Table16Chip::load(chip.table16.clone(), layouter)?;
 
-        let table16_chip = Table16Chip::construct::<Fr>(chip.table16.clone());
+        let table16_chip = Table16Chip::construct::<F>(chip.table16.clone());
         let state = table16_chip.initialization_vector(layouter)?;
         // init the 16 iv cells and binding them to initialize state
         layouter.assign_region(
@@ -899,19 +900,19 @@ impl Hasher {
                     let row_i = i * 2;
                     // notice the iv is organized as (hi, lo)
                     let (iv_hi, iv_lo) =
-                        (CircuitConfig::IV16[row_i], CircuitConfig::IV16[row_i + 1]);
+                        (CircuitConfig::<F>::IV16[row_i], CircuitConfig::<F>::IV16[row_i + 1]);
                     let (cell_iv_lo, cell_iv_hi) = (
                         region.assign_fixed(
                             || "iv_hi",
                             chip.c_data,
                             row_i,
-                            || Value::known(Fr::from(iv_lo as u64)),
+                            || Value::known(F::from(iv_lo as u64)),
                         )?,
                         region.assign_fixed(
                             || "iv_hi",
                             chip.c_data,
                             row_i + 1,
-                            || Value::known(Fr::from(iv_hi as u64)),
+                            || Value::known(F::from(iv_hi as u64)),
                         )?,
                     );
                     region.constrain_equal(cell_s_lo.cell(), cell_iv_lo.cell())?;
@@ -936,12 +937,12 @@ impl Hasher {
     /// update a single 512-bit block into layouter
     fn update_block(
         &mut self,
-        layouter: &mut impl Layouter<Fr>,
-        chng: Value<Fr>,
+        layouter: &mut impl Layouter<F>,
+        chng: Value<F>,
         input: [BlockWord; BLOCK_SIZE],
         padding: Option<usize>,
         is_final: bool,
-    ) -> Result<BlockState, Error> {
+    ) -> Result<<Table16Chip as Sha256Instructions<F>>::State, Error> {
         let table16_cfg = &self.chip.table16;
 
         let w_halves = table16_cfg.message_process(layouter, input)?;
@@ -1030,8 +1031,8 @@ impl Hasher {
     /// Digest data, updating the internal state.
     pub fn update(
         &mut self,
-        layouter: &mut impl Layouter<Fr>,
-        chng: Value<Fr>,
+        layouter: &mut impl Layouter<F>,
+        chng: Value<F>,
         mut data: &[u8],
     ) -> Result<(), Error> {
         use std::cmp::min;
@@ -1086,8 +1087,8 @@ impl Hasher {
     /// generate the final digest and ready for new update.
     pub fn finalize(
         &mut self,
-        layouter: &mut impl Layouter<Fr>,
-        chng: Value<Fr>,
+        layouter: &mut impl Layouter<F>,
+        chng: Value<F>,
     ) -> Result<[Cell; DIGEST_SIZE], Error> /*Result<[BlockWord; DIGEST_SIZE], Error> */ {
         // check padding requirement
         let mut padding_pos = Some(self.cur_block.len());
@@ -1141,8 +1142,8 @@ impl Hasher {
             |mut region| {
                 let mut cells_: Vec<Cell> = Vec::new();
                 for offset in 0..8 {
-                    //let t = Value::known(Fr::zero()) ;
-                    let vall = digest_state[offset].value().map(|value| Fr::from(value as u64));
+                    //let t = Value::known(F::ZERO) ;
+                    let vall = digest_state[offset].value().map(|value| F::from(value as u64));
                     let cell = region
                     .assign_advice(|| "", self.chip.final_output, offset, || vall)
                     .expect("assign copy advice should not fail")

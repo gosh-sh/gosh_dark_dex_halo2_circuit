@@ -8,7 +8,7 @@ use halo2_base::halo2_proofs::{
     dev::MockProver,
     plonk::{self, Advice, ConstraintSystem, Circuit, Column, Instance, Expression, Selector},
 };
-
+use halo2_ecc::fields::PrimeField;
 use halo2_gadgets::sha256::{table16::*, Sha256Instructions, BLOCK_SIZE};
 use halo2_proofs::{
     circuit::{AssignedCell, Region},
@@ -19,28 +19,39 @@ use halo2_proofs::{
     poly::Rotation,
 };
 
-
+use std::marker::PhantomData;
 #[derive(Debug, Clone)]
-struct HashCircuit{
+struct HashCircuit<F: PrimeField>{
     input: Vec<u8>, 
-    digest: Option<[u32; 8]>
+    digest: Option<[u32; 8]>,
+    _marker: PhantomData<F>,
+}
+
+impl<F: PrimeField> HashCircuit<F> {
+    pub fn new(input: Vec<u8>, digest: Option<[u32; 8]>) -> Self {
+        Self {
+            input,
+            digest,
+            _marker: PhantomData,
+        }
+    }
 }
 
  #[derive(Clone)]
-pub struct MyCircuitConfig {
-    base_config: CircuitConfig,
+pub struct MyCircuitConfig<F: PrimeField> {
+    base_config: CircuitConfig<F>,
     public_inputs: Column<Instance>,
 }
 
-impl Circuit<Fr> for HashCircuit {
-    type Config = MyCircuitConfig;
+impl<F: PrimeField> Circuit<F> for HashCircuit<F> {
+    type Config = MyCircuitConfig<F>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
         unimplemented!()
     }
 
-    fn configure(meta: &mut ConstraintSystem<Fr>) -> Self::Config {
+    fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
         let public_inputs = meta.instance_column();
         meta.enable_equality(public_inputs);
 
@@ -72,7 +83,7 @@ impl Circuit<Fr> for HashCircuit {
             is_effect: meta.advice_column(),
         };
 		
-		let chng = Expression::Constant(Fr::from(0x1000u64));
+		let chng = Expression::Constant(F::from(0x1000u64));
         let base_config = CircuitConfig::configure(meta, dev_table, chng);
         MyCircuitConfig {
             base_config,
@@ -83,9 +94,9 @@ impl Circuit<Fr> for HashCircuit {
     fn synthesize(
         &self,
         config: Self::Config,
-        mut layouter: impl Layouter<Fr>,
+        mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
-		let chng_v = Value::known(Fr::from(0x1000u64));
+		let chng_v = Value::known(F::from(0x1000u64));
         let mut hasher = Hasher::new(config.base_config, &mut layouter)?;
 
         let input = &self.input;
@@ -143,7 +154,7 @@ const DIGEST_NIL: [u32; 8] = [
 
 #[test]
 fn simple_test() {
-    let circuit = HashCircuit{input: vec![b'a', b'b', b'c'], digest: Some(DIGEST_ABC)};
+    let circuit: HashCircuit<Fr> = HashCircuit::<Fr>::new( vec![b'a', b'b', b'c'],  Some(DIGEST_ABC));
 
     let rr = sum256_32(&vec![b'a', b'b', b'c']);
     for val in rr {
