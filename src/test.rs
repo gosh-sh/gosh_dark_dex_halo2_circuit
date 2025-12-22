@@ -37,6 +37,7 @@ use std::{
     path::Path,
     rc::Rc,
 };
+
 #[test]
 fn simple_test() {
     let sk = random::<u64>();
