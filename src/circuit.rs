@@ -275,3 +275,24 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
         Ok(())
     }
 }
+
+
+#[test]
+fn simple_test() {
+    let sk = random::<u64>();
+    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk);
+    let g = Secp256k1Affine::generator();
+    
+    let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
+    let token_type = Fr::from(1u64);
+    let private_note_sum = Fr::from(1000u64);
+    
+    println!("{:?}", sk);
+    println!("{:?}", pk);
+    println!("{:?}", g);
+
+    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum),  Some(sk), Some(pk), Some(g));
+
+    let prover = MockProver::run(18, &circuit, vec![vec![Fr::from(1u64), Fr::from(1000u64)]]).unwrap();
+    assert_eq!(prover.verify(), Ok(()));
+}
