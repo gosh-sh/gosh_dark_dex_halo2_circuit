@@ -319,8 +319,11 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
         hasher.update(&mut layouter, chng_v, input_sk)?;
         let sk_digest = hasher.finalize(&mut layouter, chng_v)?;
 
-        for d in sk_digest{
-            println!("d = {:?}", d.value().map(Clone::clone))
+
+        for d in sk_digest {
+            let z = d.value().map(|value| F::from(value.to_bytes_le()[0] as u64));
+            println!("d = {:?}", d.value());
+            println!("z = {:?}", z);
         }
 
         /// 
