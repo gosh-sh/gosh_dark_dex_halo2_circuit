@@ -1,5 +1,8 @@
 use crate::hasher::*;
 use crate::sha256::*;
+use crate::prover::*;
+use crate::verifier::*;
+use rand::rngs::OsRng;
 
 use halo2_base::halo2_proofs::{
     circuit::SimpleFloorPlanner,
@@ -19,8 +22,23 @@ use halo2_proofs::{
     poly::Rotation,
 };
 
+use halo2_proofs::plonk::VerifyingKey;
+use halo2_proofs::{
+    halo2curves::bn256::{Bn256, G1Affine},
+    poly::{
+        commitment::ParamsProver,
+        kzg::{
+            commitment::{KZGCommitmentScheme, ParamsKZG},
+            multiopen::{ProverSHPLONK, VerifierSHPLONK},
+            strategy::SingleStrategy,
+        },
+    },
+    plonk::{create_proof, keygen_pk, keygen_vk, verify_proof},
+    transcript::{TranscriptReadBuffer, TranscriptWriterBuffer, Blake2bRead, Blake2bWrite, Challenge255},
+};
+
 use std::marker::PhantomData;
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 struct HashCircuit<F: PrimeField>{
     input: Vec<u8>, 
     digest: Option<[u32; 8]>,
@@ -48,7 +66,7 @@ impl<F: PrimeField> Circuit<F> for HashCircuit<F> {
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
-        unimplemented!()
+        Self::default()
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
@@ -176,4 +194,51 @@ fn simple_test() {
         Err(e) => panic!("{e:#?}"),
     };
     assert_eq!(prover.verify(), Ok(()));
+}
+
+#[test]
+fn kzg_test() {
+
+    let params: ParamsKZG<Bn256> = setup(17);
+    let circuit: HashCircuit<Fr> = HashCircuit::<Fr>::new( vec![b'a', b'b', b'c'],  Some(DIGEST_ABC));
+    
+    let vk = keygen_vk(&params, &circuit).unwrap();
+    let pk = keygen_pk(&params, vk, &circuit).unwrap();
+
+    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+
+    let mut pub_: Vec<Fr> = Vec::new();
+    for val in DIGEST_ABC {
+        print!("{:#x}", val);
+        pub_.push(Fr::from(val as u64));
+    }
+    
+    create_proof::<KZGCommitmentScheme<Bn256>, ProverSHPLONK<_>, _, _, _, _>(
+        &params,
+        &pk,
+        &[circuit],
+        &[&[&pub_]],
+        OsRng,
+        &mut transcript,
+    )
+    .expect("proof generation should not fail");
+
+    let proof: Vec<u8> = transcript.finalize();
+    
+    println!("proof len = {:?}", proof.len());
+
+    let empty_circuit: HashCircuit<Fr> = HashCircuit::<Fr>::default();
+    let vk_from_empty = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
+
+    let strategy = SingleStrategy::new(&params);
+    let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+    assert!(verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<_>, _, _, _>(
+        &params,
+        &vk_from_empty,
+        strategy,
+        &[&[&pub_]],
+        //&[&[]],
+        &mut transcript,
+    )
+    .is_ok());
 }

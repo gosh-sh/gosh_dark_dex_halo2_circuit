@@ -246,6 +246,7 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
                         &self.sk.map_or(Value::unknown(), Value::known),
                     ),
                 );
+                
 
                 let var_window_bits: usize = 4;
 
