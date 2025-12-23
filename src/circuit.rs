@@ -8,6 +8,7 @@ use halo2_base::halo2_proofs::{
     plonk::Fixed,
 };
 
+use halo2_base::utils::ScalarField;
 use rand::random;
 
 use std::fs::File;
@@ -79,6 +80,7 @@ pub struct CircuitParams {
 pub struct DarkDexCircuit<F: PrimeField> {
     pub token_type: Option<F>,
     pub private_note_sum: Option<F>,
+    pub vault_rand_val: Option<F>,
     pub sk: Option<Fq>,
     pub pk: Option<Secp256k1Affine>,
     pub g: Option<Secp256k1Affine>,
@@ -86,10 +88,11 @@ pub struct DarkDexCircuit<F: PrimeField> {
 }
 
 impl<F: PrimeField> DarkDexCircuit<F> {
-    pub fn new(token_type: Option<F>, private_note_sum: Option<F>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>) -> Self {
+    pub fn new(token_type: Option<F>, private_note_sum: Option<F>, vault_rand_val: Option<F>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>) -> Self {
         Self {
             token_type,
             private_note_sum,
+            vault_rand_val,
             sk,
             pk,
             g,
@@ -310,15 +313,41 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
         }
 
         let chng_v = Value::known(F::from(0x1000u64));
-        let mut hasher = Hasher::new(config.hash_base_config, &mut layouter)?;
+        let mut hasher = Hasher::new(config.hash_base_config.clone(), &mut layouter)?;
 
-        let input = &self.sk.unwrap().to_bytes();
-        hasher.update(&mut layouter, chng_v, input)?;
+        let input_sk = &self.sk.unwrap().to_bytes();
+        hasher.update(&mut layouter, chng_v, input_sk)?;
         let sk_digest = hasher.finalize(&mut layouter, chng_v)?;
 
         for d in sk_digest{
             println!("d = {:?}", d.value().map(Clone::clone))
         }
+
+        /// 
+        /// 
+        let mut private_note_sum_bytes  = self.private_note_sum.unwrap().to_bytes_le();
+        println!("private_note_sum_bytes_ = {:?}", private_note_sum_bytes);
+
+        let mut token_type_bytes  = self.token_type.unwrap().to_bytes_le();
+        println!("token_type_bytes_ = {:?}", token_type_bytes);
+
+        let mut vault_rand_val_bytes  = self.vault_rand_val.unwrap().to_bytes_le();
+        println!("vault_rand_val_bytes_ = {:?}", vault_rand_val_bytes);
+        
+        let mut deposit_identifier_bytes = self.pk.unwrap().x.to_bytes().to_vec();
+        deposit_identifier_bytes.append(&mut self.pk.unwrap().y.to_bytes().to_vec());
+        deposit_identifier_bytes.append(&mut private_note_sum_bytes);
+        deposit_identifier_bytes.append(&mut token_type_bytes);
+        deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
+        hasher.update(&mut layouter, chng_v, &deposit_identifier_bytes)?;
+        
+        let deposit_identifier_digest: [halo2_proofs::circuit::AssignedCell<F, F>; 8] = hasher.finalize(&mut layouter, chng_v)?;
+
+        for d in deposit_identifier_digest {
+            println!("d_ = {:?}", d.value().map(Clone::clone))
+        }
+        
+        
 
 
 
@@ -362,16 +391,14 @@ fn simple_test() {
     let sk_bytes_digest_bytes = sum256(&sk_bytes);
     println!("sk_bytes_digest_bytes = {:?}", sk_bytes_digest_bytes);
 
-    let mut token_type_bytes: Vec<u8> = Vec::new();
-    append_uint64(&mut token_type_bytes, token_type_raw);
-    println!("token_type_bytes = {:?}", token_type_bytes);
 
-    let mut private_note_sum_bytes: Vec<u8> = Vec::new();
-    append_uint64(&mut private_note_sum_bytes, private_note_sum_raw);
+    let mut private_note_sum_bytes: Vec<u8> = private_note_sum.to_bytes_le();
     println!("private_note_sum_bytes = {:?}", private_note_sum_bytes);
 
-    let mut vault_rand_val_bytes: Vec<u8> = Vec::new();
-    append_uint64(&mut vault_rand_val_bytes, vault_rand_val_raw);
+    let mut token_type_bytes: Vec<u8> = token_type.to_bytes_le();
+    println!("token_type_bytes = {:?}", token_type_bytes);
+
+    let mut vault_rand_val_bytes: Vec<u8> = vault_rand_val.to_bytes_le();
     println!("vault_rand_val_bytes = {:?}", vault_rand_val_bytes);
 
     let mut deposit_identifier_bytes = pk.x.to_bytes().to_vec();
@@ -386,7 +413,7 @@ fn simple_test() {
     
      
 
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum),  Some(sk), Some(pk), Some(g));
+    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g));
 
     let prover = MockProver::run(18, &circuit, vec![vec![Fr::from(1u64), Fr::from(1000u64)]]).unwrap();
     assert_eq!(prover.verify(), Ok(()));
