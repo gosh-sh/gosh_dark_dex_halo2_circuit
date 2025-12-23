@@ -1089,7 +1089,7 @@ impl<F: PrimeField> Hasher<F>  {
         &mut self,
         layouter: &mut impl Layouter<F>,
         chng: Value<F>,
-    ) -> Result<[Cell; DIGEST_SIZE], Error> /*Result<[BlockWord; DIGEST_SIZE], Error> */ {
+    ) -> Result<[AssignedCell<F, F>; DIGEST_SIZE], Error> /*Result<[BlockWord; DIGEST_SIZE], Error> */ {
         // check padding requirement
         let mut padding_pos = Some(self.cur_block.len());
 
@@ -1140,14 +1140,14 @@ impl<F: PrimeField> Hasher<F>  {
         let final_output_cells = layouter.assign_region(
             || "set final output",
             |mut region| {
-                let mut cells_: Vec<Cell> = Vec::new();
+                let mut cells_  = Vec::new();
                 for offset in 0..8 {
                     //let t = Value::known(F::ZERO) ;
                     let vall = digest_state[offset].value().map(|value| F::from(value as u64));
                     let cell = region
                     .assign_advice(|| "", self.chip.final_output, offset, || vall)
-                    .expect("assign copy advice should not fail")
-                    .cell();
+                    .expect("assign copy advice should not fail");
+                    
                     cells_.push(cell);
 
                 }
@@ -1155,7 +1155,7 @@ impl<F: PrimeField> Hasher<F>  {
             }
         ).unwrap();
 
-        let final_output_cells: [Cell; DIGEST_SIZE] = final_output_cells.try_into().unwrap();
+        let final_output_cells: [AssignedCell<F, F>; DIGEST_SIZE] = final_output_cells.try_into().unwrap();
 
         Ok(final_output_cells)
         

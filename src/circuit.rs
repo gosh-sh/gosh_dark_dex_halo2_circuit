@@ -107,8 +107,7 @@ pub struct DarkDexConfig<F: PrimeField> {
     private_note_sum_internal: Column<Advice>,
     public_inputs: Column<Instance>, /** token_type_id_public_val, private_note_sum_public_val */
     fp_chip: FpChip::<F>,
-    //hash_base_config: CircuitConfig,
-
+    hash_base_config: CircuitConfig<F>,
 }
 
 impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
@@ -156,7 +155,7 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
 
         //// Sha256 part
         
-        /* struct DevTable {
+        struct DevTable {
 		    s_enable: Column<Fixed>,
             input_rlc: Column<Advice>,
             input_len: Column<Advice>,
@@ -184,11 +183,11 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
             is_effect: meta.advice_column(),
         };
 		
-		let chng = Expression::Constant(Fr::from(0x1000u64));
+		let chng = Expression::Constant(F::from(0x1000u64));
         let hash_base_config = CircuitConfig::configure(meta, dev_table, chng);
-        */
+        
         /// 
-        DarkDexConfig{ a, b, c,  token_type_id_internal, private_note_sum_internal, public_inputs, fp_chip}
+        DarkDexConfig{ a, b, c,  token_type_id_internal, private_note_sum_internal, public_inputs, fp_chip, hash_base_config}
     }
 
     fn synthesize(
@@ -310,6 +309,19 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
             layouter.constrain_instance(cell, config.public_inputs, i)?;
         }
 
+        let chng_v = Value::known(F::from(0x1000u64));
+        let mut hasher = Hasher::new(config.hash_base_config, &mut layouter)?;
+
+        let input = &self.sk.unwrap().to_bytes();
+        hasher.update(&mut layouter, chng_v, input)?;
+        let sk_digest = hasher.finalize(&mut layouter, chng_v)?;
+
+        for d in sk_digest{
+            println!("d = {:?}", d.value().map(Clone::clone))
+        }
+
+
+
         Ok(())
     }
 }
@@ -319,6 +331,8 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
 fn simple_test() {
     let sk_raw = random::<u64>();
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
+
+
     let g = Secp256k1Affine::generator();
 
     let token_type_raw = 1u64;
@@ -334,12 +348,16 @@ fn simple_test() {
     println!("{:?}", pk);
     println!("{:?}", g);
 
-    let mut sk_bytes: Vec<u8> = Vec::new();
-    append_uint64(&mut sk_bytes, sk_raw);
-    println!("sk_bytes = {:?}", sk_bytes);
+    let sk_bytes  = sk.to_bytes();
+    println!("sk_bytes  = {:?}", sk.to_bytes());
 
     let sk_bytes_digest = sum256_32(&sk_bytes);
     println!("sk_bytes_digest = {:?}", sk_bytes_digest);
+
+    for val in sk_bytes_digest {
+        println!("{:#x}", val);
+    }
+
 
     let sk_bytes_digest_bytes = sum256(&sk_bytes);
     println!("sk_bytes_digest_bytes = {:?}", sk_bytes_digest_bytes);

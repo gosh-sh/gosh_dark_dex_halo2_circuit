@@ -112,7 +112,7 @@ impl<F: PrimeField> Circuit<F> for HashCircuit<F> {
         }*/
 
         for (i, cell) in ret_digest.into_iter().enumerate() {
-            layouter.constrain_instance(cell, config.public_inputs, i)?;
+            layouter.constrain_instance(cell.cell(), config.public_inputs, i)?;
         }
 		
 		Ok(())
