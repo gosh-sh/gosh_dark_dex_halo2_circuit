@@ -1,3 +1,4 @@
+use crate::sha256::*;
 use crate::prover::*;
 use crate::verifier::*;
 use crate::circuit::*;
@@ -37,27 +38,104 @@ use std::{
     path::Path,
     rc::Rc,
 };
+use halo2_base::utils::ScalarField;
+
+use rand::rngs::OsRng;
 
 #[test]
-fn simple_test() {
-    let sk = random::<u64>();
-    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk);
-    let g = Secp256k1Affine::generator();
+fn kzg_test_() {
+    let sk_raw = random::<u64>();
+    let token_type_raw = 1u64;
+    let private_note_sum_raw = 1000u64;
+    let vault_rand_val_raw = 111u64;
+
+    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
     let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
-    let token_type = Fr::from(1u64);
-    let private_note_sum = Fr::from(1000u64);
-    let vault_rand_val = Fr::from(111u64);
+    let g = Secp256k1Affine::generator();
+    let token_type = Fr::from(token_type_raw);
+    let private_note_sum = Fr::from(private_note_sum_raw);
+    let vault_rand_val = Fr::from(vault_rand_val_raw);
     
-    println!("{:?}", sk);
-    println!("{:?}", pk);
-    println!("{:?}", g);
+    let sk_bytes: [u8; 8]  = sk.to_bytes()[..8].try_into().unwrap();
+    let mut private_note_sum_bytes: Vec<u8> = private_note_sum.to_bytes_le()[..8].try_into().unwrap();
+    let mut token_type_bytes: Vec<u8> = token_type.to_bytes_le()[..8].try_into().unwrap();
+    let mut vault_rand_val_bytes: Vec<u8> = vault_rand_val.to_bytes_le()[..8].try_into().unwrap();
 
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(vault_rand_val), Some(private_note_sum),  Some(sk), Some(pk), Some(g));
+    println!("pk.x.to_bytes().to_vec() = {:?}", pk.x.to_bytes().to_vec());
+    println!("pk.x.to_bytes().to_vec() size = {:?}", pk.x.to_bytes().to_vec().len());
+    println!("pk.y.to_bytes().to_vec() = {:?}", pk.y.to_bytes().to_vec());
+    println!("pk.y.to_bytes().to_vec() size = {:?}", pk.y.to_bytes().to_vec().len());
 
-    let prover = MockProver::run(18, &circuit, vec![vec![Fr::from(1u64), Fr::from(1000u64)]]).unwrap();
-    assert_eq!(prover.verify(), Ok(()));
+    println!("sk_bytes = {:?}", sk_bytes);
+    println!("token_type_bytes = {:?}", token_type_bytes);
+    println!("vault_rand_val_bytes = {:?}", vault_rand_val_bytes);
+    println!("private_note_sum_bytes = {:?}", private_note_sum_bytes);
+
+    let mut deposit_identifier_bytes = sk_bytes.to_vec();
+    deposit_identifier_bytes.append(&mut pk.x.to_bytes().to_vec());
+    deposit_identifier_bytes.append(&mut pk.y.to_bytes().to_vec());
+    deposit_identifier_bytes.append(&mut private_note_sum_bytes);
+    deposit_identifier_bytes.append(&mut token_type_bytes);
+    deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
+
+    let input =  deposit_identifier_bytes; 
+    println!("input size = {:?}", input.len());
+
+    let digest = sum256_32(&input);
+
+    let mut digest_words: Vec<Fr> = Vec::new();
+
+    for val in digest {
+        println!("d@ = {:#x}", val);
+        digest_words.push(Fr::from(val as u64));
+    }
+
+    let mut pub_inputs = vec![token_type, private_note_sum];
+    pub_inputs.append(&mut digest_words);
+
+    //////
+
+    let params: ParamsKZG<Bn256> = setup(18);
+    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g));
+    
+    let vk = keygen_vk(&params, &circuit).unwrap();
+    let pk = keygen_pk(&params, vk, &circuit).unwrap();
+
+    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+
+    
+    create_proof::<KZGCommitmentScheme<Bn256>, ProverSHPLONK<_>, _, _, _, _>(
+        &params,
+        &pk,
+        &[circuit],
+        &[&[&pub_inputs]],
+        OsRng,
+        &mut transcript,
+    )
+    .expect("proof generation should not fail");
+
+    let proof: Vec<u8> = transcript.finalize();
+    
+    println!("proof len = {:?}", proof.len());
+
+    let empty_circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::default();
+    let vk_from_empty = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
+
+    let strategy = SingleStrategy::new(&params);
+    let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+    assert!(verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<_>, _, _, _>(
+        &params,
+        &vk_from_empty,
+        strategy,
+        &[&[&pub_inputs]],
+        //&[&[]],
+        &mut transcript,
+    )
+    .is_ok());
 }
 
+
+/////////////////
 #[test]
 fn generate_and_backup_kzg_params_test() {
     let k = 18;
@@ -70,45 +148,95 @@ fn generate_and_backup_verification_key_test() {
     generate_verififcation_key_without_witness_and_backup(&params, "verification_key.bin".to_string());
 }
 
-#[test]
-fn verifier_sketch_test() {
-    let token_type_pub = 1u64;
-    let private_note_sum_pub =  1000u64;
-    let params = read_kzg_params("kzg_params.bin".to_string());
-    let mut proof: Vec<u8> = std::fs::read("proof.bin".to_string()).unwrap();
-    let vk_from_empty: VerifyingKey<G1Affine> = verification_key_from_path("verification_key.bin".to_string());
-    let pub_inputs = vec![Fr::from(token_type_pub), Fr::from(private_note_sum_pub)];
-    assert!(verify_proof_(&params, &proof, &vk_from_empty, pub_inputs));
-}
 
 #[test]
 fn full_test_with_backuped_params() {
-    let sk = random::<u64>();
-    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk);
-    let g = Secp256k1Affine::generator();
-    let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
-    let token_type = Fr::from(1u64);
-    let token_type_pub = 1u64;
-    let private_note_sum = Fr::from(1000u64);
-    let private_note_sum_pub =  1000u64;
+    let sk_raw = random::<u64>();
+    let token_type_raw = 1u64;
+    let private_note_sum_raw = 1000u64;
+    let vault_rand_val_raw = 111u64;
 
-    let vault_rand_val = Fr::from(111u64);
+    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
+    let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
+    let g = Secp256k1Affine::generator();
+    let token_type = Fr::from(token_type_raw);
+    let private_note_sum = Fr::from(private_note_sum_raw);
+    let vault_rand_val = Fr::from(vault_rand_val_raw);
+    
+    let sk_bytes: [u8; 8]  = sk.to_bytes()[..8].try_into().unwrap();
+    let mut private_note_sum_bytes: Vec<u8> = private_note_sum.to_bytes_le()[..8].try_into().unwrap();
+    let mut token_type_bytes: Vec<u8> = token_type.to_bytes_le()[..8].try_into().unwrap();
+    let mut vault_rand_val_bytes: Vec<u8> = vault_rand_val.to_bytes_le()[..8].try_into().unwrap();
+
+    println!("pk.x.to_bytes().to_vec() = {:?}", pk.x.to_bytes().to_vec());
+    println!("pk.x.to_bytes().to_vec() size = {:?}", pk.x.to_bytes().to_vec().len());
+    println!("pk.y.to_bytes().to_vec() = {:?}", pk.y.to_bytes().to_vec());
+    println!("pk.y.to_bytes().to_vec() size = {:?}", pk.y.to_bytes().to_vec().len());
+
+    println!("sk_bytes = {:?}", sk_bytes);
+    println!("token_type_bytes = {:?}", token_type_bytes);
+    println!("vault_rand_val_bytes = {:?}", vault_rand_val_bytes);
+    println!("private_note_sum_bytes = {:?}", private_note_sum_bytes);
+
+    let mut deposit_identifier_bytes = sk_bytes.to_vec();
+    deposit_identifier_bytes.append(&mut pk.x.to_bytes().to_vec());
+    deposit_identifier_bytes.append(&mut pk.y.to_bytes().to_vec());
+    deposit_identifier_bytes.append(&mut private_note_sum_bytes);
+    deposit_identifier_bytes.append(&mut token_type_bytes);
+    deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
+
+    let input =  deposit_identifier_bytes; 
+    println!("input size = {:?}", input.len());
+
+    let digest = sum256_32(&input);
+
+    let mut digest_words: Vec<Fr> = Vec::new();
+
+    for val in digest {
+        println!("d@ = {:#x}", val);
+        digest_words.push(Fr::from(val as u64));
+    }
+
+    println!("digest_words = {:?}", digest_words);
+
+    let mut pub_inputs = vec![token_type, private_note_sum];
+    pub_inputs.append(&mut digest_words);
+
+    /////
 
     let params = read_kzg_params("kzg_params.bin".to_string());
 
-    let proof = generate_proof(&params, Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g), token_type_pub, private_note_sum_pub);
+    let proof = generate_proof(&params, Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g), &mut pub_inputs);
 
     std::fs::write("proof.bin".to_string(), proof.clone()).unwrap();
 
     let vk_from_empty: VerifyingKey<G1Affine> = verification_key_from_path("verification_key.bin".to_string());
-    //generate_verififcation_key_without_witness(&params);
 
-    let pub_inputs = vec![Fr::from(token_type_pub), Fr::from(private_note_sum_pub)];
     assert!(verify_proof_(&params, &proof, &vk_from_empty, pub_inputs));
 
 }
 
 #[test]
+fn verifier_sketch_test() {
+    let token_type_pub = 1u64;
+    let private_note_sum_pub =  1000u64;
+  
+    let deposit_identifier_digest: Vec<u64> = vec![0x00000000000000000000000000000000000000000000000000000000bb996d95,0x0000000000000000000000000000000000000000000000000000000023400a35, 0x00000000000000000000000000000000000000000000000000000000d80d7096, 0x0000000000000000000000000000000000000000000000000000000021077933, 0x00000000000000000000000000000000000000000000000000000000709a8d97, 0x00000000000000000000000000000000000000000000000000000000aaecedde, 0x00000000000000000000000000000000000000000000000000000000eda92a8a, 0x000000000000000000000000000000000000000000000000000000001a98705f];
+
+    let mut deposit_identifier_digest_: Vec<Fr> = Vec::new();
+    for d in deposit_identifier_digest{
+        deposit_identifier_digest_.push(Fr::from(d));
+    }
+    let params = read_kzg_params("kzg_params.bin".to_string());
+    let mut proof: Vec<u8> = std::fs::read("proof.bin".to_string()).unwrap();
+    let vk_from_empty: VerifyingKey<G1Affine> = verification_key_from_path("verification_key.bin".to_string());
+    let mut pub_inputs = vec![Fr::from(token_type_pub), Fr::from(private_note_sum_pub)];
+    pub_inputs.append(&mut deposit_identifier_digest_);
+    assert!(verify_proof_(&params, &proof, &vk_from_empty, pub_inputs));
+}
+
+
+/*#[test]
 fn full_test() {
     let sk = random::<u64>();
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk);
@@ -151,7 +279,7 @@ fn full_test() {
     //let vk: VerifyingKey<G1Affine> = VerifyingKey::read::<_, DarkDexCircuit<Fr>>(&mut vk1_buf, SerdeFormat::RawBytesUnchecked)
                 //.expect("Reading vkey should not fail");
 
-    //let path = format!("./data/1.vkey");
+    //let path = format!("./data/1.vkey");*/
 
     /*match File::open(path.as_str()) {
         Ok(f) => {
@@ -164,7 +292,7 @@ fn full_test() {
         }
     }*/
 
-    let strategy = SingleStrategy::new(&params_new);
+   /* let strategy = SingleStrategy::new(&params_new);
     let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
 
     assert!(
@@ -179,4 +307,4 @@ fn full_test() {
         .is_ok()
     );
 
-}
+}*/

@@ -1142,7 +1142,6 @@ impl<F: PrimeField> Hasher<F>  {
             |mut region| {
                 let mut cells_  = Vec::new();
                 for offset in 0..8 {
-                    //let t = Value::known(F::ZERO) ;
                     let vall = digest_state[offset].value().map(|value| F::from(value as u64));
                     let cell = region
                     .assign_advice(|| "", self.chip.final_output, offset, || vall)

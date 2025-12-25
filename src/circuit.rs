@@ -76,7 +76,7 @@ pub struct CircuitParams {
     num_limbs: usize,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct DarkDexCircuit<F: PrimeField> {
     pub token_type: Option<F>,
     pub private_note_sum: Option<F>,
@@ -101,17 +101,19 @@ impl<F: PrimeField> DarkDexCircuit<F> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DarkDexConfig<F: PrimeField> {
     a: Column<Advice>,
     b: Column<Advice>,
     c: Column<Fixed>,
     token_type_id_internal: Column<Advice>,
     private_note_sum_internal: Column<Advice>,
-    public_inputs: Column<Instance>, /** token_type_id_public_val, private_note_sum_public_val */
+    public_inputs: Column<Instance>, /** token_type_id_public_val, private_note_sum_public_val, deposit_identifier_digest (8 words) */
     fp_chip: FpChip::<F>,
     hash_base_config: CircuitConfig<F>,
 }
+
+const CAP_BLK: usize = 24;
 
 impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
     type Config = DarkDexConfig<F>;
@@ -189,6 +191,7 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
 		let chng = Expression::Constant(F::from(0x1000u64));
         let hash_base_config = CircuitConfig::configure(meta, dev_table, chng);
         
+        /// 
         /// 
         DarkDexConfig{ a, b, c,  token_type_id_internal, private_note_sum_internal, public_inputs, fp_chip, hash_base_config}
     }
@@ -313,100 +316,94 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
             layouter.constrain_instance(cell, config.public_inputs, i)?;
         }
 
-       let chng_v = Value::known(F::from(0x1000u64));
-        let mut hasher = Hasher::new(config.hash_base_config.clone(), &mut layouter)?;
+        let mut input: Vec<u8> = vec![];
 
-         /*let input_sk = &self.sk.unwrap().to_bytes();
-        hasher.update(&mut layouter, chng_v, input_sk)?;
-        let sk_digest = hasher.finalize(&mut layouter, chng_v)?;
+        if let (Some(pk), Some(sk), Some(private_note_sum), Some(token_type), Some(vault_rand_val)) = (self.pk, self.sk, self.private_note_sum, self.token_type, self.vault_rand_val) {
+            let sk_bytes: Vec<u8> = sk.to_bytes()[..8].try_into().unwrap();
 
+            let mut private_note_sum_bytes  = private_note_sum.to_bytes_le()[..8].try_into().unwrap();
+            println!("private_note_sum_bytes_ = {:?}", private_note_sum_bytes);
 
-        for d in sk_digest {
-            let z = d.value().map(|value| F::from(value.to_bytes_le()[0] as u64));
-            println!("d = {:?}", d.value());
-            println!("z = {:?}", z);
-        }*/
+            let mut token_type_bytes  = token_type.to_bytes_le()[..8].try_into().unwrap();
+            println!("token_type_bytes_ = {:?}", token_type_bytes);
 
+            let mut vault_rand_val_bytes  = vault_rand_val.to_bytes_le()[..8].try_into().unwrap();
+            println!("vault_rand_val_bytes_ = {:?}", vault_rand_val_bytes);
         
-        let sk_bytes = &self.sk.unwrap().to_bytes();
-
-        let mut private_note_sum_bytes  = self.private_note_sum.unwrap().to_bytes_le();
-        println!("private_note_sum_bytes_ = {:?}", private_note_sum_bytes);
-
-        let mut token_type_bytes  = self.token_type.unwrap().to_bytes_le();
-        println!("token_type_bytes_ = {:?}", token_type_bytes);
-
-        let mut vault_rand_val_bytes  = self.vault_rand_val.unwrap().to_bytes_le();
-        println!("vault_rand_val_bytes_ = {:?}", vault_rand_val_bytes);
+            let mut deposit_identifier_bytes = sk_bytes;
         
-        let mut deposit_identifier_bytes = sk_bytes.to_vec();
-        
-        deposit_identifier_bytes.append(&mut self.pk.unwrap().x.to_bytes().to_vec());
-        deposit_identifier_bytes.append(&mut self.pk.unwrap().y.to_bytes().to_vec());
-        deposit_identifier_bytes.append(&mut private_note_sum_bytes);
-        deposit_identifier_bytes.append(&mut token_type_bytes);
-        deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
+            deposit_identifier_bytes.append(&mut pk.x.to_bytes().to_vec());
+            deposit_identifier_bytes.append(&mut pk.y.to_bytes().to_vec());
+            deposit_identifier_bytes.append(&mut private_note_sum_bytes);
+            deposit_identifier_bytes.append(&mut token_type_bytes);
+            deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
 
-        hasher.update(&mut layouter, chng_v, &deposit_identifier_bytes)?;
-        
-        let deposit_identifier_digest: [halo2_proofs::circuit::AssignedCell<F, F>; 8] = hasher.finalize(&mut layouter, chng_v)?;
+            input.append(&mut deposit_identifier_bytes);
 
-        for d in deposit_identifier_digest.clone() {
-            println!("!d_ = {:?}", d.value().map(Clone::clone))
         }
 
-        for (i, cell) in deposit_identifier_digest.into_iter().enumerate() {
+        println!("input: {:?}", input);
+        println!("input.len() = {:?}", input.len());
+
+        let chng_v = Value::known(F::from(0x1000u64));
+        let mut hasher = Hasher::new(config.hash_base_config, &mut layouter)?;
+
+        hasher.update(&mut layouter, chng_v, &input)?;
+
+        println!("hasher.updated_size() : {:?}", hasher.updated_size());
+
+        let ret_digest = hasher.finalize(&mut layouter, chng_v)?;
+        for d in ret_digest.clone() {
+            println!("digest word : {:?}", d.value());
+                
+        }
+        
+        for (i, cell) in ret_digest.into_iter().enumerate() {
             layouter.constrain_instance(cell.cell(), config.public_inputs, i + 2)?;
+        }
+
+        for i in hasher.blocks()..CAP_BLK {
+            println!("i : {:?}", i);
+            hasher.update(&mut layouter, chng_v, &[])?;
+            let ret_digest = hasher.finalize(&mut layouter, chng_v)?;
+            for d in ret_digest {
+                println!("digest word (padding): {:?}", d.value());
+                
+            }
         }
         
         Ok(())
     }
 }
 
-
 #[test]
 fn simple_test() {
     let sk_raw = random::<u64>();
-    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
-
-
-    let g = Secp256k1Affine::generator();
-
     let token_type_raw = 1u64;
     let private_note_sum_raw = 1000u64;
     let vault_rand_val_raw = 111u64;
 
+    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
     let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
+    let g = Secp256k1Affine::generator();
     let token_type = Fr::from(token_type_raw);
     let private_note_sum = Fr::from(private_note_sum_raw);
     let vault_rand_val = Fr::from(vault_rand_val_raw);
     
-    println!("{:?}", sk);
-    println!("{:?}", pk);
-    println!("{:?}", g);
+    let sk_bytes: [u8; 8]  = sk.to_bytes()[..8].try_into().unwrap();
+    let mut private_note_sum_bytes: Vec<u8> = private_note_sum.to_bytes_le()[..8].try_into().unwrap();
+    let mut token_type_bytes: Vec<u8> = token_type.to_bytes_le()[..8].try_into().unwrap();
+    let mut vault_rand_val_bytes: Vec<u8> = vault_rand_val.to_bytes_le()[..8].try_into().unwrap();
 
-    let sk_bytes  = sk.to_bytes();
-    println!("sk_bytes  = {:?}", sk.to_bytes());
+    println!("pk.x.to_bytes().to_vec() = {:?}", pk.x.to_bytes().to_vec());
+    println!("pk.x.to_bytes().to_vec() size = {:?}", pk.x.to_bytes().to_vec().len());
+    println!("pk.y.to_bytes().to_vec() = {:?}", pk.y.to_bytes().to_vec());
+    println!("pk.y.to_bytes().to_vec() size = {:?}", pk.y.to_bytes().to_vec().len());
 
-    /*let sk_bytes_digest = sum256_32(&sk_bytes);
-    println!("sk_bytes_digest = {:?}", sk_bytes_digest);
-
-    for val in sk_bytes_digest {
-        println!("{:#x}", val);
-    }*/
-
-    //let sk_bytes_digest_bytes = sum256(&sk_bytes);
-    //println!("sk_bytes_digest_bytes = {:?}", sk_bytes_digest_bytes);
-
-
-    let mut private_note_sum_bytes: Vec<u8> = private_note_sum.to_bytes_le();
-    println!("private_note_sum_bytes = {:?}", private_note_sum_bytes);
-
-    let mut token_type_bytes: Vec<u8> = token_type.to_bytes_le();
+    println!("sk_bytes = {:?}", sk_bytes);
     println!("token_type_bytes = {:?}", token_type_bytes);
-
-    let mut vault_rand_val_bytes: Vec<u8> = vault_rand_val.to_bytes_le();
     println!("vault_rand_val_bytes = {:?}", vault_rand_val_bytes);
+    println!("private_note_sum_bytes = {:?}", private_note_sum_bytes);
 
     let mut deposit_identifier_bytes = sk_bytes.to_vec();
     deposit_identifier_bytes.append(&mut pk.x.to_bytes().to_vec());
@@ -414,22 +411,23 @@ fn simple_test() {
     deposit_identifier_bytes.append(&mut private_note_sum_bytes);
     deposit_identifier_bytes.append(&mut token_type_bytes);
     deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
-    //deposit_identifier_bytes.append(&mut sk_bytes_digest_bytes.to_vec());
 
-    let deposit_identifier_digest = sum256_32(&deposit_identifier_bytes);
-    println!("deposit_identifier_digest = {:?}", deposit_identifier_digest);
+    let input =  deposit_identifier_bytes; 
+    println!("input size = {:?}", input.len());
 
-    let mut deposit_identifier_digest_words: Vec<Fr> = Vec::new();
+    let digest = sum256_32(&input);
 
-    for val in deposit_identifier_digest {
+    let mut digest_words: Vec<Fr> = Vec::new();
+
+    for val in digest {
         println!("d@ = {:#x}", val);
-        deposit_identifier_digest_words.push(Fr::from(val as u64));
+        digest_words.push(Fr::from(val as u64));
     }
 
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g));
+    let mut pub_inputs = vec![token_type, private_note_sum];
+    pub_inputs.append(&mut digest_words);
 
-    let mut pub_inputs = vec![Fr::from(1u64), Fr::from(1000u64)];
-    pub_inputs.append(&mut deposit_identifier_digest_words);
+    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g));
 
     let prover = MockProver::run(18, &circuit, vec![pub_inputs]).unwrap();
     assert_eq!(prover.verify(), Ok(()));

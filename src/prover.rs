@@ -49,10 +49,11 @@ pub fn generate_proof_key(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, pri
     keygen_pk(params, vk, &circuit)
 }
 
-pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, vault_rand_val: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>, token_type_pub_val: u64, private_note_sum_pub_val: u64) -> Vec<u8>{
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(token_type, private_note_sum, vault_rand_val, sk, pk, g);
+
+pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, vault_rand_val: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>, pub_inputs: &mut Vec<Fr>) -> Vec<u8>{
+    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new( token_type, private_note_sum, vault_rand_val, sk, pk, g);
     let vk = keygen_vk(params, &circuit).unwrap();
-    let pk = keygen_pk(params, vk, &circuit).unwrap();
+    let pk = keygen_pk(params, vk.clone(), &circuit).unwrap();
 
     let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
     
@@ -60,13 +61,32 @@ pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private
         &params,
         &pk,
         &[circuit],
-        &[&[&[Fr::from(token_type_pub_val), Fr::from(private_note_sum_pub_val)]]],
+        &[&[&pub_inputs]],
         OsRng,
         &mut transcript,
     )
     .expect("proof generation should not fail");
 
     let proof: Vec<u8> = transcript.finalize();
+    
+     /*let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+    let strategy = SingleStrategy::new(&params);
+
+
+   let circuit_: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::default();
+    let vk_from_empty = keygen_vk(params, &circuit_).unwrap();
+
+    assert!(verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<_>, _, _, _>(
+        &params,
+        &vk_from_empty,
+        strategy,
+        &[&[&pub_inputs]],
+        //&[&[]],
+        &mut transcript,
+    )
+    .is_ok());*/
+
+
     proof
 }
 

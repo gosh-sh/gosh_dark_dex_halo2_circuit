@@ -5,6 +5,12 @@ use crate::verifier::*;
 use rand::rngs::OsRng;
 
 use halo2_base::halo2_proofs::{
+    arithmetic::CurveAffine,
+    halo2curves::{bn256::Fr, secp256k1::{Fp, Fq, Secp256k1Affine}},
+    plonk::Fixed,
+};
+
+use halo2_base::halo2_proofs::{
     circuit::SimpleFloorPlanner,
     circuit::Layouter,
     circuit::Value,
@@ -15,13 +21,13 @@ use halo2_ecc::fields::PrimeField;
 use halo2_gadgets::sha256::{table16::*, Sha256Instructions, BLOCK_SIZE};
 use halo2_proofs::{
     circuit::{AssignedCell, Region},
-    halo2curves::bn256::Fr,
+    
     plonk::{
-        Any, Constraints, Error, Fixed, TableColumn,
+        Any, Constraints, Error,  TableColumn,
     },
     poly::Rotation,
 };
-
+use rand::random;
 use halo2_proofs::plonk::VerifyingKey;
 use halo2_proofs::{
     halo2curves::bn256::{Bn256, G1Affine},
@@ -41,19 +47,19 @@ use std::marker::PhantomData;
 #[derive(Default, Debug, Clone)]
 struct HashCircuit<F: PrimeField>{
     input: Vec<u8>, 
-    digest: Option<[u32; 8]>,
     _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField> HashCircuit<F> {
-    pub fn new(input: Vec<u8>, digest: Option<[u32; 8]>) -> Self {
+    pub fn new(input: Vec<u8>) -> Self {
         Self {
             input,
-            digest,
             _marker: PhantomData,
         }
     }
 }
+
+const CAP_BLK: usize = 24;
 
  #[derive(Clone)]
 pub struct MyCircuitConfig<F: PrimeField> {
@@ -118,19 +124,25 @@ impl<F: PrimeField> Circuit<F> for HashCircuit<F> {
         let mut hasher = Hasher::new(config.base_config, &mut layouter)?;
 
         let input = &self.input;
-        let digest = &self.digest;
+        println!("input: {:?}", input);
 
         hasher.update(&mut layouter, chng_v, input)?;
         let ret_digest = hasher.finalize(&mut layouter, chng_v)?;
-        //println!("{:#x?}", ret_digest);
-        /*if let Some(check_digest) = digest {
-            for (w, check) in ret_digest.into_iter().zip(*check_digest) {
-                w.0.assert_if_known(|digest_word| *digest_word == check);
-            }
-        }*/
 
         for (i, cell) in ret_digest.into_iter().enumerate() {
             layouter.constrain_instance(cell.cell(), config.public_inputs, i)?;
+        }
+
+        println!("hasher.blocks() : {:?}", hasher.blocks());
+        //Handle Padding stuff, otherwise kzg stuff mat faul during verification
+        for i in hasher.blocks()..CAP_BLK {
+            println!("i : {:?}", i);
+            hasher.update(&mut layouter, chng_v, &[])?;
+            let ret_digest = hasher.finalize(&mut layouter, chng_v)?;
+            for d in ret_digest {
+                println!("digest word (padding): {:?}", d.value());
+                
+            }
         }
 		
 		Ok(())
@@ -150,30 +162,10 @@ const DIGEST_ABC: [u32; 8] = [
     0b11110010000000000001010110101101,
 ];
 
-const DIGEST_ABD: [u32; 8] = [
-    0xa52d159f, 0x262b2c6d, 0xdb724a61, 0x840befc3, 0x6eb30c88, 0x877a4030, 0xb65cbe86,
-    0x298449c9,
-];
-
-const DIGEST_BLOCK: [u32; 8] = [
-    0xffe054fe, 0x7ae0cb6d, 0xc65c3af9, 0xb61d5209, 0xf439851d, 0xb43d0ba5, 0x997337df,
-    0x154668eb,
-];
-
-const DIGEST_AX65: [u32; 8] = [
-    0x635361c4, 0x8bb9eab1, 0x4198e76e, 0xa8ab7f1a, 0x41685d6a, 0xd62aa914, 0x6d301d4f,
-    0x17eb0ae0,
-];
-
-const DIGEST_NIL: [u32; 8] = [
-    0xe3b0c442, 0x98fc1c14, 0x9afbf4c8, 0x996fb924, 0x27ae41e4, 0x649b934c, 0xa495991b,
-    0x7852b855,
-];
 
 #[test]
 fn simple_test() {
-    let circuit: HashCircuit<Fr> = HashCircuit::<Fr>::new( vec![b'a', b'b', b'c'],  Some(DIGEST_ABC));
-
+    let circuit: HashCircuit<Fr> = HashCircuit::<Fr>::new( vec![b'a', b'b', b'c']);
     let rr = sum256_32(&vec![b'a', b'b', b'c']);
     for val in rr {
         print!("{:#x}", val);
@@ -187,8 +179,7 @@ fn simple_test() {
         pub_.push(Fr::from(val as u64));
     }
 
-    
-	
+
 	let prover = match MockProver::<Fr>::run(17, &circuit, vec![pub_]) {
         Ok(prover) => prover,
         Err(e) => panic!("{e:#?}"),
@@ -196,28 +187,33 @@ fn simple_test() {
     assert_eq!(prover.verify(), Ok(()));
 }
 
+
 #[test]
-fn kzg_test() {
+fn kzg_test_simple() {
+    let input =  [b'a'; BLOCK_SIZE * 6]; 
+    println!("input size = {:?}", input.len());
+
+    let digest = sum256_32(&input);
+    let mut pub_inputs: Vec<Fr> = Vec::new();
+    for val in digest {
+        println!("d@ = {:#x}", val);
+        pub_inputs.push(Fr::from(val as u64));
+    }
 
     let params: ParamsKZG<Bn256> = setup(17);
-    let circuit: HashCircuit<Fr> = HashCircuit::<Fr>::new( vec![b'a', b'b', b'c'],  Some(DIGEST_ABC));
+    let circuit: HashCircuit<Fr> = HashCircuit::<Fr>::new(input.to_vec());
     
     let vk = keygen_vk(&params, &circuit).unwrap();
-    let pk = keygen_pk(&params, vk, &circuit).unwrap();
+    let pk = keygen_pk(&params, vk.clone(), &circuit).unwrap();
 
     let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
-
-    let mut pub_: Vec<Fr> = Vec::new();
-    for val in DIGEST_ABC {
-        print!("{:#x}", val);
-        pub_.push(Fr::from(val as u64));
-    }
     
     create_proof::<KZGCommitmentScheme<Bn256>, ProverSHPLONK<_>, _, _, _, _>(
         &params,
         &pk,
         &[circuit],
-        &[&[&pub_]],
+        &[&[&pub_inputs]],
+        // &[&[]],
         OsRng,
         &mut transcript,
     )
@@ -236,8 +232,96 @@ fn kzg_test() {
         &params,
         &vk_from_empty,
         strategy,
-        &[&[&pub_]],
+        &[&[&pub_inputs]],
         //&[&[]],
+        &mut transcript,
+    )
+    .is_ok());
+}
+
+#[test]
+fn kzg_test_with_real_data() {
+    let sk_raw = random::<u64>();
+    let token_type_raw = 1u64;
+    let private_note_sum_raw = 1000u64;
+    let vault_rand_val_raw = 111u64;
+
+    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
+    let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
+    let token_type = Fr::from(token_type_raw);
+    let private_note_sum = Fr::from(private_note_sum_raw);
+    let vault_rand_val = Fr::from(vault_rand_val_raw);
+    
+    let sk_bytes: [u8; 8]  = sk.to_bytes()[..8].try_into().unwrap();
+    let mut private_note_sum_bytes: Vec<u8> = private_note_sum.to_bytes_le()[..8].try_into().unwrap();
+    let mut token_type_bytes: Vec<u8> = token_type.to_bytes_le()[..8].try_into().unwrap();
+    let mut vault_rand_val_bytes: Vec<u8> = vault_rand_val.to_bytes_le()[..8].try_into().unwrap();
+
+
+    println!("pk.x.to_bytes().to_vec() = {:?}", pk.x.to_bytes().to_vec());
+    println!("pk.x.to_bytes().to_vec() size = {:?}", pk.x.to_bytes().to_vec().len());
+    println!("pk.y.to_bytes().to_vec() = {:?}", pk.y.to_bytes().to_vec());
+    println!("pk.y.to_bytes().to_vec() size = {:?}", pk.y.to_bytes().to_vec().len());
+
+    println!("sk_bytes = {:?}", sk_bytes);
+    println!("token_type_bytes = {:?}", token_type_bytes);
+    println!("vault_rand_val_bytes = {:?}", vault_rand_val_bytes);
+    println!("private_note_sum_bytes = {:?}", private_note_sum_bytes);
+
+    let mut deposit_identifier_bytes = sk_bytes.to_vec();
+    deposit_identifier_bytes.append(&mut pk.x.to_bytes().to_vec());
+    deposit_identifier_bytes.append(&mut pk.y.to_bytes().to_vec());
+    deposit_identifier_bytes.append(&mut private_note_sum_bytes);
+    deposit_identifier_bytes.append(&mut token_type_bytes);
+    deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
+
+    let input =  deposit_identifier_bytes; 
+    println!("input size = {:?}", input.len());
+
+    let digest = sum256_32(&input);
+
+    let mut digest_words: Vec<Fr> = Vec::new();
+
+    for val in digest {
+        println!("d@ = {:#x}", val);
+        digest_words.push(Fr::from(val as u64));
+    }
+
+    let mut pub_inputs = vec![];
+    pub_inputs.append(&mut digest_words);
+
+    let params: ParamsKZG<Bn256> = setup(17);
+    let circuit: HashCircuit<Fr> = HashCircuit::<Fr>::new( input );
+    
+    let vk = keygen_vk(&params, &circuit).unwrap();
+    let pk = keygen_pk(&params, vk.clone(), &circuit).unwrap();
+
+    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+
+    create_proof::<KZGCommitmentScheme<Bn256>, ProverSHPLONK<_>, _, _, _, _>(
+        &params,
+        &pk,
+        &[circuit],
+        &[&[&pub_inputs]],
+        OsRng,
+        &mut transcript,
+    )
+    .expect("proof generation should not fail");
+
+    let proof: Vec<u8> = transcript.finalize();
+    
+    println!("proof len = {:?}", proof.len());
+
+    let empty_circuit: HashCircuit<Fr> = HashCircuit::<Fr>::default();
+    let vk_from_empty = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
+
+    let strategy = SingleStrategy::new(&params);
+    let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+    assert!(verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<_>, _, _, _>(
+        &params,
+        &vk_from_empty,
+        strategy,
+        &[&[&pub_inputs]],
         &mut transcript,
     )
     .is_ok());

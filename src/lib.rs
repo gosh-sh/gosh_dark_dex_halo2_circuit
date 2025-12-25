@@ -11,4 +11,7 @@ mod test;
 #[cfg(test)]
 mod hasher_test;
 
+#[cfg(test)]
+mod test_hash_more;
+
 
