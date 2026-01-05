@@ -12,6 +12,8 @@ use halo2_proofs::{
     transcript::{TranscriptReadBuffer, TranscriptWriterBuffer, Blake2bRead, Blake2bWrite, Challenge255},
 };
 
+use std::time::{Instant, Duration};
+
 use halo2_proofs::plonk::{VerifyingKey, ProvingKey};
 
 use halo2_proofs::SerdeFormat;
@@ -41,7 +43,8 @@ pub fn verification_key_from_path(path: String) -> VerifyingKey<G1Affine> {
 pub fn verify_proof_(params: &ParamsKZG<Bn256>, proof: &[u8], vk: &VerifyingKey<G1Affine>, pub_inputs: Vec<Fr>) -> bool {
     let strategy = SingleStrategy::new(&params);
     let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
-    verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<_>, _, _, _>(
+    let now = Instant::now();
+    let res = verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<_>, _, _, _>(
         &params,
         &vk,
         strategy,
@@ -49,6 +52,9 @@ pub fn verify_proof_(params: &ParamsKZG<Bn256>, proof: &[u8], vk: &VerifyingKey<
         //&[&[]],
         &mut transcript,
     )
-    .is_ok()
+    .is_ok();
+    let end = now.elapsed().as_millis();
+    println!("proof generation time: {:?}", end);
+    res
 }
 

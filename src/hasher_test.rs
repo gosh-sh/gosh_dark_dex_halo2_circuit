@@ -4,6 +4,8 @@ use crate::prover::*;
 use crate::verifier::*;
 use rand::rngs::OsRng;
 
+use std::time::{Instant, Duration};
+
 use halo2_base::halo2_proofs::{
     arithmetic::CurveAffine,
     halo2curves::{bn256::Fr, secp256k1::{Fp, Fq, Secp256k1Affine}},
@@ -293,6 +295,7 @@ fn kzg_test_with_real_data() {
     let params: ParamsKZG<Bn256> = setup(17);
     let circuit: HashCircuit<Fr> = HashCircuit::<Fr>::new( input );
     
+    let now = Instant::now();
     let vk = keygen_vk(&params, &circuit).unwrap();
     let pk = keygen_pk(&params, vk.clone(), &circuit).unwrap();
 
@@ -309,6 +312,9 @@ fn kzg_test_with_real_data() {
     .expect("proof generation should not fail");
 
     let proof: Vec<u8> = transcript.finalize();
+
+    let end  = now.elapsed().as_millis();
+    println!("proof generation time: {:?}", end);
     
     println!("proof len = {:?}", proof.len());
 
@@ -317,6 +323,8 @@ fn kzg_test_with_real_data() {
 
     let strategy = SingleStrategy::new(&params);
     let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+
+    let now = Instant::now();
     assert!(verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<_>, _, _, _>(
         &params,
         &vk_from_empty,
@@ -325,4 +333,7 @@ fn kzg_test_with_real_data() {
         &mut transcript,
     )
     .is_ok());
+
+    let end  = now.elapsed().as_millis();
+    println!("verififcation  time: {:?}", end);
 }
