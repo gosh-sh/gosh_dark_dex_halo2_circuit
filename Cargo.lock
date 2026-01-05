@@ -239,6 +239,7 @@ dependencies = [
  "halo2_gadgets",
  "halo2_proofs",
  "itertools 0.11.0",
+ "poseidon-base",
  "poseidon-circuit",
  "rand",
  "rand_chacha",
@@ -862,3 +863,8 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[patch.unused]]
+name = "poseidon"
+version = "0.2.0"
+source = "git+https://github.com/scroll-tech/poseidon.git?branch=scroll-dev-0220#2fb4a2385bada39b50dce12fe50cb80d2fd33476"

@@ -5,6 +5,8 @@ pub mod verifier;
 pub mod sha256;
 pub mod poseidon_try;
 
+pub mod poseidon;
+
 #[cfg(test)]
 mod test;
 
