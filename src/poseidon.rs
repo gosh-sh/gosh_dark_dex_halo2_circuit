@@ -253,12 +253,15 @@ fn test() {
 
     //let vk = keygen_vk(&params, &circuit).unwrap();
 
+    let empty_circuit = Signature::default();
+    let vk_from_empty = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
+
     let now = Instant::now();
 
     assert!(
         verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<'_, Bn256>, _, _, _>(
             &verifier_params,
-            &vk.clone(),
+            &vk_from_empty.clone(),
             strategy,
             &[&[&pub_]],
             &mut transcript
