@@ -2,12 +2,13 @@ use std::marker::PhantomData;
 use crate::hasher::*;
 use crate::sha256::*;
 
+use halo2_base::AssignedValue;
 use halo2_base::halo2_proofs::{
     arithmetic::CurveAffine,
     halo2curves::{bn256::Fr, secp256k1::{Fp, Fq, Secp256k1Affine}},
     plonk::Fixed,
 };
-
+use halo2_proofs::poly::Rotation;
 use halo2_base::utils::ScalarField;
 use rand::random;
 
@@ -15,7 +16,7 @@ use std::fs::File;
 
 use serde::Serialize;
 use serde::Deserialize;
-
+ use halo2_proofs::circuit::AssignedCell;
 use halo2_ecc::fields::PrimeField;
 use halo2_ecc::ecc::scalar_multiply;
 use halo2_ecc::fields::fp;
@@ -62,7 +63,42 @@ use std::time::Duration;
 
 use rand::rngs::OsRng;
 
+use poseidon_base::primitives::{ConstantLength, Hash as PoseidonHash, P128Pow5T3, P128Pow5T3Compact, Spec,  CachedSpec};
+
+use poseidon_circuit::{
+    poseidon::{
+        //primitives::{ConstantLength, Hash as PoseidonHash, P128Pow5T3},
+        Hash,
+    },
+    Hashable,
+};
+use rand::thread_rng;
+pub use poseidon_circuit::poseidon::{Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig};
+
+use rand::SeedableRng;
+
+pub type P128Pow5T3Fr = P128Pow5T3<Fr>;
+
 type FpChip<F> = fp::FpConfig<F, Fp>;
+
+pub fn poseidon_hash_gadget<const L: usize>(
+    config: PoseidonConfig<Fr, 3, 2>,
+    mut layouter: impl Layouter<Fr>,
+    messages: [AssignedCell<Fr, Fr>; L],
+) -> Result<AssignedCell<Fr, Fr>, Error> {
+    let chip = PoseidonChip::construct(config);
+    let hasher = Hash::<_, _, P128Pow5T3<Fr>, ConstantLength<L>, 3, 2>::init(
+        chip,
+        layouter.namespace(|| "init poseidon hasher"),
+    )?;
+
+    hasher.hash(layouter.namespace(|| "hash"), messages)
+}
+
+// TODO: make Element Hashable
+pub fn poseidon_hash<const L: usize>(message: [Fr; L]) -> Fr {
+   PoseidonHash::<Fr, P128Pow5T3Compact<Fr>, ConstantLength<L>, 3, 2>::init().hash(message)
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct CircuitParams {
@@ -77,18 +113,18 @@ pub struct CircuitParams {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct DarkDexCircuit<F: PrimeField> {
-    pub token_type: Option<F>,
-    pub private_note_sum: Option<F>,
-    pub vault_rand_val: Option<F>,
+pub struct DarkDexCircuit {
+    pub token_type: Option<Fr>,
+    pub private_note_sum: Option<Fr>,
+    pub vault_rand_val: Option<Fr>,
     pub sk: Option<Fq>,
     pub pk: Option<Secp256k1Affine>,
     pub g: Option<Secp256k1Affine>,
-    _marker: PhantomData<F>,
+    _marker: PhantomData<Fr>,
 }
 
-impl<F: PrimeField> DarkDexCircuit<F> {
-    pub fn new(token_type: Option<F>, private_note_sum: Option<F>, vault_rand_val: Option<F>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>) -> Self {
+impl DarkDexCircuit {
+    pub fn new(token_type: Option<Fr>, private_note_sum: Option<Fr>, vault_rand_val: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>) -> Self {
         Self {
             token_type,
             private_note_sum,
@@ -102,21 +138,23 @@ impl<F: PrimeField> DarkDexCircuit<F> {
 }
 
 #[derive(Clone)]
-pub struct DarkDexConfig<F: PrimeField> {
+pub struct DarkDexConfig{
     a: Column<Advice>,
     b: Column<Advice>,
     c: Column<Fixed>,
-    token_type_id_internal: Column<Advice>,
-    private_note_sum_internal: Column<Advice>,
-    public_inputs: Column<Instance>, /** token_type_id_public_val, private_note_sum_public_val, deposit_identifier_digest (8 words) */
-    fp_chip: FpChip::<F>,
-    hash_base_config: CircuitConfig<F>,
+    advices: [Column<Advice>; 5],
+    key_data: Column<Advice>,
+    deposit_identifier_data: Column<Advice>,
+    q_enable: Selector,
+    q_enable_2: Selector,
+    public_inputs: Column<Instance>, /**  private_note_sum_public_val, token_type_id_public_val, deposit_identifier_digest (8 words) */
+    fp_chip: FpChip::<Fr>,
+    poseidon_config: PoseidonConfig<Fr, 3, 2>,
 }
 
-const CAP_BLK: usize = 24;
 
-impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
-    type Config = DarkDexConfig<F>;
+impl Circuit<Fr> for DarkDexCircuit {
+    type Config = DarkDexConfig;
     type FloorPlanner = SimpleFloorPlanner;
 
 
@@ -124,14 +162,14 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
         Self::default()
     }
 
-    fn configure(meta: &mut plonk::ConstraintSystem<F>) -> Self::Config {
+    fn configure(meta: &mut plonk::ConstraintSystem<Fr>) -> Self::Config {
         let path = "config/circuit.config".to_string();
         let params: CircuitParams = serde_json::from_reader(
             File::open(&path).unwrap_or_else(|_| panic!("{path:?} file should exist")),
         )
         .unwrap();
 
-        let fp_chip = FpChip::<F>::configure(
+        let fp_chip = FpChip::<Fr>::configure(
             meta,
             params.strategy,
             &[params.num_advice],
@@ -148,58 +186,85 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
         let a = meta.advice_column();
         let b = meta.advice_column();
         let c = meta.fixed_column();
-        let token_type_id_internal = meta.advice_column();
-        let private_note_sum_internal = meta.advice_column();
+        let deposit_identifier_data = meta.advice_column();
+        let key_data = meta.advice_column();
         let public_inputs = meta.instance_column();
         meta.enable_equality(a);
         meta.enable_equality(b);
         meta.enable_equality(c);
-        meta.enable_equality(token_type_id_internal);
-        meta.enable_equality(private_note_sum_internal);
+        meta.enable_equality(key_data);
+        meta.enable_equality(deposit_identifier_data);
         meta.enable_equality(public_inputs);
 
-        //// Sha256 part
-        
-        struct DevTable {
-		    s_enable: Column<Fixed>,
-            input_rlc: Column<Advice>,
-            input_len: Column<Advice>,
-            hashes_rlc: Column<Advice>,
-            is_effect: Column<Advice>,
-		}
+        let q_enable = meta.complex_selector();
+        let q_enable_2 = meta.complex_selector();
 
-        impl SHA256Table for DevTable {
-            fn cols(&self) -> [Column<Any>; 5] {
-                [
-                    self.s_enable.into(),
-                    self.input_rlc.into(),
-                    self.input_len.into(),
-                    self.hashes_rlc.into(),
-                    self.is_effect.into(),
-                ]
-			}
-		}
-		
-		let dev_table = DevTable {
-            s_enable: meta.fixed_column(),
-            input_rlc: meta.advice_column(),
-            input_len: meta.advice_column(),
-            hashes_rlc: meta.advice_column(),
-            is_effect: meta.advice_column(),
-        };
-		
-		let chng = Expression::Constant(F::from(0x1000u64));
-        let hash_base_config = CircuitConfig::configure(meta, dev_table, chng);
+        meta.create_gate("vertical-add", |meta| {
+            let w0 = meta.query_advice(deposit_identifier_data, Rotation(0));
+            let w1 = meta.query_advice(deposit_identifier_data, Rotation(1));
+            let w2 = meta.query_advice(deposit_identifier_data, Rotation(2));
+            let w3 = meta.query_advice(deposit_identifier_data, Rotation(3));
+            let q_enable = meta.query_selector(q_enable);
+            vec![q_enable * ((w0 + w1 + w2) - w3)]
+        });
+        // ANCHOR: new_gate
+
+        meta.create_gate("big-vertical-add", |meta| {
+            let w0 = meta.query_advice(key_data, Rotation(0));
+            let w1 = meta.query_advice(key_data, Rotation(1));
+            let w2 = meta.query_advice(key_data, Rotation(2));
+            let w3 = meta.query_advice(key_data, Rotation(3));
+            let w4 = meta.query_advice(key_data, Rotation(4));
+            let w5 = meta.query_advice(key_data, Rotation(5));
+            let w6 = meta.query_advice(key_data, Rotation(6));
+            let w7 = meta.query_advice(key_data, Rotation(7));
+            let w8 = meta.query_advice(key_data, Rotation(8));
+            let w9 = meta.query_advice(key_data, Rotation(9));
+            let q_enable_2 = meta.query_selector(q_enable_2);
+            vec![q_enable_2 * ((w0 + w1 + w2 + w3 + w4 + w5 + w6 + w7 + w8) - w9)]
+        });
+
+        /// Poseidon config
+        /// 
+        let advices = [
+            meta.advice_column(),
+            meta.advice_column(),
+            meta.advice_column(),
+            meta.advice_column(),
+            meta.advice_column(),
+        ];
+
+        for advice in advices.iter() {
+            meta.enable_equality(*advice);
+        }
+
+        let lagrange_coeffs = [
+            meta.fixed_column(),
+            meta.fixed_column(),
+            meta.fixed_column(),
+            meta.fixed_column(),
+            meta.fixed_column(),
+            meta.fixed_column(),
+        ];
+        meta.enable_constant(lagrange_coeffs[0]);
+
+        let poseidon_config = PoseidonChip::configure::<P128Pow5T3Fr>(
+            meta,
+            advices[1..4].try_into().unwrap(),
+            advices[0],
+            lagrange_coeffs[0..3].try_into().unwrap(),
+            lagrange_coeffs[3..6].try_into().unwrap(),
+        );
+         
+        ////
         
-        /// 
-        /// 
-        DarkDexConfig{ a, b, c,  token_type_id_internal, private_note_sum_internal, public_inputs, fp_chip, hash_base_config}
+        DarkDexConfig{ a, b, c, advices, key_data, deposit_identifier_data, q_enable, q_enable_2, public_inputs, fp_chip, poseidon_config}
     }
 
     fn synthesize(
         &self,
         config: Self::Config,
-        mut layouter: impl Layouter<F>
+        mut layouter: impl Layouter<Fr>
     ) -> Result<(), plonk::Error> {
 
         let fp_chip = config.fp_chip;
@@ -216,7 +281,7 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
             |region| {
                 let mut aux = fp_chip.new_context(region);
                 let ctx = &mut aux;
-                let ecc_chip = EccChip::<F, FpChip<F>>::construct(fp_chip.clone());
+                let ecc_chip = EccChip::<Fr, FpChip<Fr>>::construct(fp_chip.clone());
 
                 let pk_assigned = ecc_chip.load_private(
                     ctx,
@@ -225,6 +290,14 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
                         self.pk.map_or(Value::unknown(), |pt| Value::known(pt.y)),
                     ),
                 );
+
+                println!("pk_assigned: {:?}", pk_assigned);
+                for s in  pk_assigned.x.truncation.limbs.clone() {
+                    println!("pk_x_limbs_data: {:?}", s.value);
+                }
+                for s in  pk_assigned.y.truncation.limbs.clone() {
+                    println!("pk_y_limbs_data: {:?}", s.value);
+                }
 
                 let g_assigned = ecc_chip.load_private(
                     ctx,
@@ -236,7 +309,7 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
 
                 let base_chip = ecc_chip.field_chip;
 
-                let fq_chip = fp::FpConfig::<F, Fq>::construct(
+                let fq_chip = fp::FpConfig::<Fr, Fq>::construct(
                     base_chip.range.clone(),
                     base_chip.limb_bits,
                     base_chip.num_limbs,
@@ -245,15 +318,31 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
 
                 let sk_assigned = fq_chip.load_private(
                     ctx,
-                    fp::FpConfig::<F, Fq>::fe_to_witness(
+                    fp::FpConfig::<Fr, Fq>::fe_to_witness(
                         &self.sk.map_or(Value::unknown(), Value::known),
                     ),
                 );
-                
+
+                let mut key_limbs_data: Vec<AssignedValue<Fr>> = sk_assigned.truncation.limbs.clone();
+
+                println!("sk_data: {:?}", key_limbs_data.len());
+                for s in  key_limbs_data.clone() {
+                    println!("sk_data: {:?}", s.value);
+                }
+
+                let mut pk_x_limbs_data: Vec<AssignedValue<Fr>> = pk_assigned.x.truncation.limbs.clone();
+                key_limbs_data.append(&mut pk_x_limbs_data);
+
+
+                let mut pk_y_limbs_data: Vec<AssignedValue<Fr>> = pk_assigned.y.truncation.limbs.clone();
+                key_limbs_data.append(&mut pk_y_limbs_data);
+
+                println!("key_limbs_data: {:?}", key_limbs_data);
+
 
                 let var_window_bits: usize = 4;
 
-                let mul = scalar_multiply::<F, _, Secp256k1Affine>(
+                let mul = scalar_multiply::<Fr, _, Secp256k1Affine>(
                     &base_chip,
                     ctx,
                     &g_assigned,
@@ -261,18 +350,18 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
                     base_chip.limb_bits,
                     var_window_bits,
                 );
+                
 
                 let x_eq = base_chip.is_equal(ctx, &pk_assigned.x, &mul.x);
                 let y_eq = base_chip.is_equal(ctx, &pk_assigned.y, &mul.y);
 
-                Ok((x_eq, y_eq))
+                Ok((x_eq, y_eq, key_limbs_data))
             }
         ).unwrap();
 
         layouter.assign_region(
             || "check final equality result",
             |mut region| {
-
 
                 let cell_x = region
                     .assign_advice(|| "", config.a, 0, || res.0.value)
@@ -284,96 +373,143 @@ impl<F: PrimeField> Circuit<F> for DarkDexCircuit<F> {
                     .expect("assign copy advice should not fail")
                     .cell();
 
-                let fix = region.assign_fixed( || "", config.c, 0,  || Value::known(F::ONE)).unwrap().cell();
+                let fix = region.assign_fixed( || "", config.c, 0,  || Value::known(Fr::one())).unwrap().cell();
 
-                let  _ = region.constrain_equal(cell_x, fix).unwrap();
+                let _ = region.constrain_equal(cell_x, res.0.cell()).unwrap();
+                let _ = region.constrain_equal(cell_y, res.1.cell()).unwrap();
+                let _ = region.constrain_equal(cell_x, fix).unwrap();
                 let _ = region.constrain_equal(cell_y, fix).unwrap();
-                
-
                 Ok(())
             }
         ).unwrap();
 
-        let instances = layouter.assign_region(
-            || "check token type & private note sum",
+
+        let key_limbs_data = res.2;
+        let key_elements_sum = layouter.assign_region(
+            || "asssign key data and sum",
             |mut region| {
-                let cell_token_type = region
-                    .assign_advice(|| "", config.token_type_id_internal, 0, || self.token_type.map_or(Value::unknown(), Value::known))
-                    .expect("assign copy advice should not fail")
-                    .cell();
 
-                let cell_private_note_sum = region
-                    .assign_advice(|| "", config.private_note_sum_internal, 0, || self.private_note_sum.map_or(Value::unknown(), Value::known))
-                    .expect("assign copy advice should not fail")
-                    .cell();
+                let mut assigned_cells: Vec<AssignedCell<Fr, Fr>> =  Vec::new();
 
+                for i in 0..9 {
+                    let val = key_limbs_data[i].value.clone();
+                    let cell_ = region
+                    .assign_advice(|| "", config.key_data, i, || val)
+                    .expect("assign copy advice should not fail");
+                    assigned_cells.push(cell_);
+                }
 
-                Ok([cell_token_type, cell_private_note_sum])
+                let w0 = assigned_cells[0].value();
+                let w1 = assigned_cells[1].value();
+                let mut sum = w0.and_then(|w0| w1.and_then(|w1| Value::known((*w0) + (*w1))));
+                for i in 2..9 {
+                    let w3 = assigned_cells[i].value();
+                    sum = sum.and_then(|sum| w3.and_then(|w3| Value::known(sum + (*w3))));
+                }
+
+                let cell_sum = region
+                    .assign_advice(|| "", config.key_data, 9, || sum)
+                    .expect("assign copy advice should not fail");
+
+                
+                config.q_enable_2.enable(&mut region, 0)?;
+
+                Ok((cell_sum))
             }
         ).unwrap();
 
-        for (i, cell) in instances.into_iter().enumerate() {
+        let instances = layouter.assign_region(
+            || "asssign private note sum & token type & vault rand val",
+            |mut region| {
+                
+                let cell_private_note_sum = region
+                    .assign_advice(|| "", config.deposit_identifier_data, 0, || self.private_note_sum.map_or(Value::unknown(), Value::known))
+                    .expect("assign copy advice should not fail");
+
+                let cell_token_type = region
+                    .assign_advice(|| "", config.deposit_identifier_data, 1, || self.token_type.map_or(Value::unknown(), Value::known))
+                    .expect("assign copy advice should not fail");
+
+                let cell_vault_rand_val = region
+                    .assign_advice(|| "", config.deposit_identifier_data, 2, || self.vault_rand_val.map_or(Value::unknown(), Value::known))
+                    .expect("assign copy advice should not fail");
+
+                let w0 = cell_private_note_sum.value();
+                let w1 = cell_token_type.value();
+                let w2 = cell_vault_rand_val.value();
+
+                let w3 = w0.and_then(|w0| w1.and_then(|w1| Value::known((*w0) + (*w1))));
+                let w4 = w2.and_then(|w2| w3.and_then(|w3| Value::known((*w2) + w3)));
+
+                let cell_sum = region
+                    .assign_advice(|| "", config.deposit_identifier_data, 3, || w4)
+                    .expect("assign copy advice should not fail");
+
+                config.q_enable.enable(&mut region, 0)?;
+
+                Ok(([cell_private_note_sum.cell(), cell_token_type.cell()], cell_sum))
+            }
+        ).unwrap();
+
+        let di_sum = instances.1;
+
+        for i in 0..2 {
+            let cell = instances.0[i];
             layouter.constrain_instance(cell, config.public_inputs, i)?;
         }
 
-        let mut input: Vec<u8> = vec![];
+        let hash = poseidon_hash_gadget(
+            config.poseidon_config,
+            layouter.namespace(|| "poseidon check"),
+            [key_elements_sum, di_sum],
+        )?;
 
-        if let (Some(pk), Some(sk), Some(private_note_sum), Some(token_type), Some(vault_rand_val)) = (self.pk, self.sk, self.private_note_sum, self.token_type, self.vault_rand_val) {
-            let sk_bytes: Vec<u8> = sk.to_bytes()[..8].try_into().unwrap();
+        layouter.constrain_instance(hash.cell(), config.public_inputs, 2)?;
 
-            let mut private_note_sum_bytes  = private_note_sum.to_bytes_le()[..8].try_into().unwrap();
-            println!("private_note_sum_bytes_ = {:?}", private_note_sum_bytes);
-
-            let mut token_type_bytes  = token_type.to_bytes_le()[..8].try_into().unwrap();
-            println!("token_type_bytes_ = {:?}", token_type_bytes);
-
-            let mut vault_rand_val_bytes  = vault_rand_val.to_bytes_le()[..8].try_into().unwrap();
-            println!("vault_rand_val_bytes_ = {:?}", vault_rand_val_bytes);
-        
-            let mut deposit_identifier_bytes = sk_bytes;
-        
-            deposit_identifier_bytes.append(&mut pk.x.to_bytes().to_vec());
-            deposit_identifier_bytes.append(&mut pk.y.to_bytes().to_vec());
-            deposit_identifier_bytes.append(&mut private_note_sum_bytes);
-            deposit_identifier_bytes.append(&mut token_type_bytes);
-            deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
-
-            input.append(&mut deposit_identifier_bytes);
-
-        }
-
-        println!("input: {:?}", input);
-        println!("input.len() = {:?}", input.len());
-
-        let chng_v = Value::known(F::from(0x1000u64));
-        let mut hasher = Hasher::new(config.hash_base_config, &mut layouter)?;
-
-        hasher.update(&mut layouter, chng_v, &input)?;
-
-        println!("hasher.updated_size() : {:?}", hasher.updated_size());
-
-        let ret_digest = hasher.finalize(&mut layouter, chng_v)?;
-        for d in ret_digest.clone() {
-            println!("digest word : {:?}", d.value());
-                
-        }
-        
-        for (i, cell) in ret_digest.into_iter().enumerate() {
-            layouter.constrain_instance(cell.cell(), config.public_inputs, i + 2)?;
-        }
-
-        for i in hasher.blocks()..CAP_BLK {
-            println!("i : {:?}", i);
-            hasher.update(&mut layouter, chng_v, &[])?;
-            let ret_digest = hasher.finalize(&mut layouter, chng_v)?;
-            for d in ret_digest {
-                println!("digest word (padding): {:?}", d.value());
-                
-            }
-        }
         
         Ok(())
     }
+}
+fn consume_uint128_10(b: &[u8]) -> u128 {
+    if b.len() < 10 {
+        //return Err("Not enough bytes for u64".into());
+        panic!("Not enough bytes for u64");
+    }
+    let result = (b[0] as u128)
+        | ((b[1] as u128) << 8)
+        | ((b[2] as u128) << 16)
+        | ((b[3] as u128) << 24)
+        | ((b[4] as u128) << 32)
+        | ((b[5] as u128) << 40)
+        | ((b[6] as u128) << 48)
+        | ((b[7] as u128) << 56)
+        | ((b[8] as u128) << 64)
+        | ((b[9] as u128) << 72)
+        
+        ;
+    
+    result
+}
+
+fn consume_uint128_11(b: &[u8]) -> u128 {
+    if b.len() < 11 {
+        //return Err("Not enough bytes for u64".into());
+        panic!("Not enough bytes for u64");
+    }
+    let result = (b[0] as u128)
+        | ((b[1] as u128) << 8)
+        | ((b[2] as u128) << 16)
+        | ((b[3] as u128) << 24)
+        | ((b[4] as u128) << 32)
+        | ((b[5] as u128) << 40)
+        | ((b[6] as u128) << 48)
+        | ((b[7] as u128) << 56)
+        | ((b[8] as u128) << 64)
+        | ((b[9] as u128) << 72)
+        | ((b[10] as u128) << 80)
+        ;
+    
+    result
 }
 
 #[test]
@@ -383,19 +519,57 @@ fn simple_test() {
     let private_note_sum_raw = 1000u64;
     let vault_rand_val_raw = 111u64;
 
+     println!("sk_raw = {:#x}", sk_raw);
+
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
     let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
     let g = Secp256k1Affine::generator();
+    
     let token_type = Fr::from(token_type_raw);
     let private_note_sum = Fr::from(private_note_sum_raw);
     let vault_rand_val = Fr::from(vault_rand_val_raw);
+
+    let sum_2  = token_type + private_note_sum + vault_rand_val;
+
+
+     
+
+
+
     
     let sk_bytes: [u8; 8]  = sk.to_bytes()[..8].try_into().unwrap();
     let mut private_note_sum_bytes: Vec<u8> = private_note_sum.to_bytes_le()[..8].try_into().unwrap();
     let mut token_type_bytes: Vec<u8> = token_type.to_bytes_le()[..8].try_into().unwrap();
     let mut vault_rand_val_bytes: Vec<u8> = vault_rand_val.to_bytes_le()[..8].try_into().unwrap();
 
+
+
     println!("pk.x.to_bytes().to_vec() = {:?}", pk.x.to_bytes().to_vec());
+
+    for val in  pk.x.to_bytes() {
+        println!("d@ = {:#x}", val);
+    }
+
+    let a1 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
+    let a2 = consume_uint128_11(&pk.x.to_bytes().to_vec()[11..22]);
+    let a3 = consume_uint128_10(&pk.x.to_bytes().to_vec()[22..]);
+
+    let a4 = consume_uint128_11(&pk.y.to_bytes().to_vec()[0..11]);
+    let a5 = consume_uint128_11(&pk.y.to_bytes().to_vec()[11..22]);
+    let a6 = consume_uint128_10(&pk.y.to_bytes().to_vec()[22..]);
+
+    let skk: u128 = sk_raw as u128;
+
+    let key_sum = skk + a1 + a2 + a3 + a4 + a5 + a6;
+
+    let sum_1 = Fr::from_u128(key_sum);
+
+    let digest = poseidon_hash([sum_1, sum_2]);
+
+    println!("a1@ = {:#x}", a1);
+    println!("a2@ = {:#x}", a2);
+    println!("a3@ = {:#x}", a3);
+
     println!("pk.x.to_bytes().to_vec() size = {:?}", pk.x.to_bytes().to_vec().len());
     println!("pk.y.to_bytes().to_vec() = {:?}", pk.y.to_bytes().to_vec());
     println!("pk.y.to_bytes().to_vec() size = {:?}", pk.y.to_bytes().to_vec().len());
@@ -415,19 +589,19 @@ fn simple_test() {
     let input =  deposit_identifier_bytes; 
     println!("input size = {:?}", input.len());
 
-    let digest = sum256_32(&input);
+    /*let digest = sum256_32(&input);
 
     let mut digest_words: Vec<Fr> = Vec::new();
 
     for val in digest {
         println!("d@ = {:#x}", val);
         digest_words.push(Fr::from(val as u64));
-    }
+    }*/
 
-    let mut pub_inputs = vec![token_type, private_note_sum];
-    pub_inputs.append(&mut digest_words);
+    let mut pub_inputs = vec![private_note_sum, token_type];
+    pub_inputs.push(digest);
 
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g));
+    let circuit: DarkDexCircuit = DarkDexCircuit::new(Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g));
 
     let prover = MockProver::run(18, &circuit, vec![pub_inputs]).unwrap();
     assert_eq!(prover.verify(), Ok(()));

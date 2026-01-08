@@ -96,7 +96,7 @@ fn kzg_test_() {
     //////
 
     let params: ParamsKZG<Bn256> = setup(18);
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g));
+    let circuit: DarkDexCircuit = DarkDexCircuit::new(Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g));
     
     let vk = keygen_vk(&params, &circuit).unwrap();
     let pk = keygen_pk(&params, vk, &circuit).unwrap();
@@ -118,7 +118,7 @@ fn kzg_test_() {
     
     println!("proof len = {:?}", proof.len());
 
-    let empty_circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::default();
+    let empty_circuit: DarkDexCircuit = DarkDexCircuit::default();
     let vk_from_empty = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
 
     let strategy = SingleStrategy::new(&params);

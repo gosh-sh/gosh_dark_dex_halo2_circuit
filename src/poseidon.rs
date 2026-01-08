@@ -195,6 +195,10 @@ impl Circuit<Fr> for Signature {
 #[test]
 fn poseidon_hash_snapshot() {
     let result = poseidon_hash([Fr::from_u128(2), Fr::from_u128(3)]);
+
+    let v = [1u8; 32];
+
+    
    
     // make sure the debug representation doesn't change so we can change the hash impl
     assert_eq!(

@@ -27,7 +27,7 @@ use rand::rngs::OsRng;
 use crate::circuit::*;
 
 pub fn verification_key_from_bytes(mut slice: &[u8]) -> VerifyingKey<G1Affine> {
-    let vk: VerifyingKey<G1Affine> = VerifyingKey::read::<_, DarkDexCircuit<Fr>>(&mut slice, SerdeFormat::RawBytesUnchecked).expect("Reading vkey should not fail");
+    let vk: VerifyingKey<G1Affine> = VerifyingKey::read::<_, DarkDexCircuit>(&mut slice, SerdeFormat::RawBytesUnchecked).expect("Reading vkey should not fail");
     vk
 }
 
@@ -36,7 +36,7 @@ pub fn verification_key_from_path(path: String) -> VerifyingKey<G1Affine> {
     let mut vk_bytes: Vec<u8> = std::fs::read(path).unwrap();
     let mut slice: &[u8] = &vk_bytes;
     println!("vk_bytes len = {:?}", vk_bytes.len());
-    let vk: VerifyingKey<G1Affine> = VerifyingKey::read::<_, DarkDexCircuit<Fr>>(&mut slice, SerdeFormat::RawBytesUnchecked).expect("Reading vkey should not fail");
+    let vk: VerifyingKey<G1Affine> = VerifyingKey::read::<_, DarkDexCircuit>(&mut slice, SerdeFormat::RawBytesUnchecked).expect("Reading vkey should not fail");
     vk
 }
 

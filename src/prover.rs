@@ -46,14 +46,14 @@ pub fn read_kzg_params(path: String) -> ParamsKZG<Bn256>{
 }
 
 pub fn generate_proof_key(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, vault_rand_val: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>) -> Result<ProvingKey<G1Affine>, Error>{
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(token_type, private_note_sum, vault_rand_val, sk, pk, g);
+    let circuit: DarkDexCircuit = DarkDexCircuit::new(token_type, private_note_sum, vault_rand_val, sk, pk, g);
     let vk = keygen_vk(params, &circuit).unwrap();
     keygen_pk(params, vk, &circuit)
 }
 
 
 pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, vault_rand_val: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>, pub_inputs: &mut Vec<Fr>) -> Vec<u8>{
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new( token_type, private_note_sum, vault_rand_val, sk, pk, g);
+    let circuit: DarkDexCircuit = DarkDexCircuit::new( token_type, private_note_sum, vault_rand_val, sk, pk, g);
 
     let now = Instant::now();
     let vk = keygen_vk(params, &circuit).unwrap();
@@ -95,12 +95,12 @@ pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private
 }
 
 pub fn generate_verififcation_key_without_witness(params: &ParamsKZG<Bn256>) -> VerifyingKey<G1Affine>{
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::default();
+    let circuit: DarkDexCircuit = DarkDexCircuit::default();
     keygen_vk(params, &circuit).unwrap()
 }
 
 pub fn generate_verififcation_key_without_witness_and_backup(params: &ParamsKZG<Bn256>, path: String) {
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::default();
+    let circuit: DarkDexCircuit = DarkDexCircuit::default();
     let vk_from_empty = keygen_vk(params, &circuit).unwrap();
     let mut vk1_buf: Vec<u8> = Vec::new();
     vk_from_empty.write(&mut vk1_buf, SerdeFormat::RawBytesUnchecked)
