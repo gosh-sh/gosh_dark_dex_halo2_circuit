@@ -1,6 +1,4 @@
 use std::marker::PhantomData;
-use crate::hasher::*;
-use crate::sha256::*;
 
 use halo2_base::AssignedValue;
 use halo2_base::halo2_proofs::{
@@ -76,6 +74,8 @@ use rand::thread_rng;
 pub use poseidon_circuit::poseidon::{Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig};
 
 use rand::SeedableRng;
+
+use crate::utils::*;
 
 pub type P128Pow5T3Fr = P128Pow5T3<Fr>;
 
@@ -291,14 +291,6 @@ impl Circuit<Fr> for DarkDexCircuit {
                     ),
                 );
 
-                println!("pk_assigned: {:?}", pk_assigned);
-                for s in  pk_assigned.x.truncation.limbs.clone() {
-                    println!("pk_x_limbs_data: {:?}", s.value);
-                }
-                for s in  pk_assigned.y.truncation.limbs.clone() {
-                    println!("pk_y_limbs_data: {:?}", s.value);
-                }
-
                 let g_assigned = ecc_chip.load_private(
                     ctx,
                     (
@@ -323,23 +315,6 @@ impl Circuit<Fr> for DarkDexCircuit {
                     ),
                 );
 
-                let mut key_limbs_data: Vec<AssignedValue<Fr>> = sk_assigned.truncation.limbs.clone();
-
-                println!("sk_data: {:?}", key_limbs_data.len());
-                for s in  key_limbs_data.clone() {
-                    println!("sk_data: {:?}", s.value);
-                }
-
-                let mut pk_x_limbs_data: Vec<AssignedValue<Fr>> = pk_assigned.x.truncation.limbs.clone();
-                key_limbs_data.append(&mut pk_x_limbs_data);
-
-
-                let mut pk_y_limbs_data: Vec<AssignedValue<Fr>> = pk_assigned.y.truncation.limbs.clone();
-                key_limbs_data.append(&mut pk_y_limbs_data);
-
-                println!("key_limbs_data: {:?}", key_limbs_data);
-
-
                 let var_window_bits: usize = 4;
 
                 let mul = scalar_multiply::<Fr, _, Secp256k1Affine>(
@@ -351,9 +326,15 @@ impl Circuit<Fr> for DarkDexCircuit {
                     var_window_bits,
                 );
                 
-
                 let x_eq = base_chip.is_equal(ctx, &pk_assigned.x, &mul.x);
                 let y_eq = base_chip.is_equal(ctx, &pk_assigned.y, &mul.y);
+
+
+                let mut key_limbs_data: Vec<AssignedValue<Fr>> = sk_assigned.truncation.limbs.clone();
+                let mut pk_x_limbs_data: Vec<AssignedValue<Fr>> = pk_assigned.x.truncation.limbs.clone();
+                key_limbs_data.append(&mut pk_x_limbs_data);
+                let mut pk_y_limbs_data: Vec<AssignedValue<Fr>> = pk_assigned.y.truncation.limbs.clone();
+                key_limbs_data.append(&mut pk_y_limbs_data);
 
                 Ok((x_eq, y_eq, key_limbs_data))
             }
@@ -386,7 +367,7 @@ impl Circuit<Fr> for DarkDexCircuit {
 
         let key_limbs_data = res.2;
         let key_elements_sum = layouter.assign_region(
-            || "asssign key data and sum",
+            || "asssign key data and sum limbs",
             |mut region| {
 
                 let mut assigned_cells: Vec<AssignedCell<Fr, Fr>> =  Vec::new();
@@ -397,6 +378,10 @@ impl Circuit<Fr> for DarkDexCircuit {
                     .assign_advice(|| "", config.key_data, i, || val)
                     .expect("assign copy advice should not fail");
                     assigned_cells.push(cell_);
+                }
+
+                for i in 0..9 {
+                    let _ = region.constrain_equal(key_limbs_data[i].cell, assigned_cells[i].cell()).unwrap();
                 }
 
                 let w0 = assigned_cells[0].value();
@@ -414,11 +399,11 @@ impl Circuit<Fr> for DarkDexCircuit {
                 
                 config.q_enable_2.enable(&mut region, 0)?;
 
-                Ok((cell_sum))
+                Ok(cell_sum)
             }
         ).unwrap();
 
-        let instances = layouter.assign_region(
+        let deposit_identifier_data = layouter.assign_region(
             || "asssign private note sum & token type & vault rand val",
             |mut region| {
                 
@@ -451,18 +436,17 @@ impl Circuit<Fr> for DarkDexCircuit {
             }
         ).unwrap();
 
-        let di_sum = instances.1;
-
-        for i in 0..2 {
-            let cell = instances.0[i];
-            layouter.constrain_instance(cell, config.public_inputs, i)?;
-        }
+        let deposit_identifier_data_sum: AssignedCell<Fr, Fr> = deposit_identifier_data.1;
 
         let hash = poseidon_hash_gadget(
             config.poseidon_config,
             layouter.namespace(|| "poseidon check"),
-            [key_elements_sum, di_sum],
+            [key_elements_sum, deposit_identifier_data_sum],
         )?;
+
+        for i in 0..2 {
+            layouter.constrain_instance(deposit_identifier_data.0[i], config.public_inputs, i)?;
+        }
 
         layouter.constrain_instance(hash.cell(), config.public_inputs, 2)?;
 
@@ -470,47 +454,7 @@ impl Circuit<Fr> for DarkDexCircuit {
         Ok(())
     }
 }
-fn consume_uint128_10(b: &[u8]) -> u128 {
-    if b.len() < 10 {
-        //return Err("Not enough bytes for u64".into());
-        panic!("Not enough bytes for u64");
-    }
-    let result = (b[0] as u128)
-        | ((b[1] as u128) << 8)
-        | ((b[2] as u128) << 16)
-        | ((b[3] as u128) << 24)
-        | ((b[4] as u128) << 32)
-        | ((b[5] as u128) << 40)
-        | ((b[6] as u128) << 48)
-        | ((b[7] as u128) << 56)
-        | ((b[8] as u128) << 64)
-        | ((b[9] as u128) << 72)
-        
-        ;
-    
-    result
-}
 
-fn consume_uint128_11(b: &[u8]) -> u128 {
-    if b.len() < 11 {
-        //return Err("Not enough bytes for u64".into());
-        panic!("Not enough bytes for u64");
-    }
-    let result = (b[0] as u128)
-        | ((b[1] as u128) << 8)
-        | ((b[2] as u128) << 16)
-        | ((b[3] as u128) << 24)
-        | ((b[4] as u128) << 32)
-        | ((b[5] as u128) << 40)
-        | ((b[6] as u128) << 48)
-        | ((b[7] as u128) << 56)
-        | ((b[8] as u128) << 64)
-        | ((b[9] as u128) << 72)
-        | ((b[10] as u128) << 80)
-        ;
-    
-    result
-}
 
 #[test]
 fn simple_test() {
@@ -519,7 +463,7 @@ fn simple_test() {
     let private_note_sum_raw = 1000u64;
     let vault_rand_val_raw = 111u64;
 
-     println!("sk_raw = {:#x}", sk_raw);
+    //println!("sk_raw = {:#x}", sk_raw);
 
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
     let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
@@ -529,77 +473,30 @@ fn simple_test() {
     let private_note_sum = Fr::from(private_note_sum_raw);
     let vault_rand_val = Fr::from(vault_rand_val_raw);
 
-    let sum_2  = token_type + private_note_sum + vault_rand_val;
+    let deposit_identifier_data_sum  = token_type + private_note_sum + vault_rand_val;
 
-
-     
-
-
-
-    
-    let sk_bytes: [u8; 8]  = sk.to_bytes()[..8].try_into().unwrap();
-    let mut private_note_sum_bytes: Vec<u8> = private_note_sum.to_bytes_le()[..8].try_into().unwrap();
-    let mut token_type_bytes: Vec<u8> = token_type.to_bytes_le()[..8].try_into().unwrap();
-    let mut vault_rand_val_bytes: Vec<u8> = vault_rand_val.to_bytes_le()[..8].try_into().unwrap();
-
-
-
-    println!("pk.x.to_bytes().to_vec() = {:?}", pk.x.to_bytes().to_vec());
-
-    for val in  pk.x.to_bytes() {
+    /*for val in  pk.x.to_bytes() {
         println!("d@ = {:#x}", val);
-    }
-
-    let a1 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
-    let a2 = consume_uint128_11(&pk.x.to_bytes().to_vec()[11..22]);
-    let a3 = consume_uint128_10(&pk.x.to_bytes().to_vec()[22..]);
-
-    let a4 = consume_uint128_11(&pk.y.to_bytes().to_vec()[0..11]);
-    let a5 = consume_uint128_11(&pk.y.to_bytes().to_vec()[11..22]);
-    let a6 = consume_uint128_10(&pk.y.to_bytes().to_vec()[22..]);
-
-    let skk: u128 = sk_raw as u128;
-
-    let key_sum = skk + a1 + a2 + a3 + a4 + a5 + a6;
-
-    let sum_1 = Fr::from_u128(key_sum);
-
-    let digest = poseidon_hash([sum_1, sum_2]);
-
-    println!("a1@ = {:#x}", a1);
-    println!("a2@ = {:#x}", a2);
-    println!("a3@ = {:#x}", a3);
-
-    println!("pk.x.to_bytes().to_vec() size = {:?}", pk.x.to_bytes().to_vec().len());
-    println!("pk.y.to_bytes().to_vec() = {:?}", pk.y.to_bytes().to_vec());
-    println!("pk.y.to_bytes().to_vec() size = {:?}", pk.y.to_bytes().to_vec().len());
-
-    println!("sk_bytes = {:?}", sk_bytes);
-    println!("token_type_bytes = {:?}", token_type_bytes);
-    println!("vault_rand_val_bytes = {:?}", vault_rand_val_bytes);
-    println!("private_note_sum_bytes = {:?}", private_note_sum_bytes);
-
-    let mut deposit_identifier_bytes = sk_bytes.to_vec();
-    deposit_identifier_bytes.append(&mut pk.x.to_bytes().to_vec());
-    deposit_identifier_bytes.append(&mut pk.y.to_bytes().to_vec());
-    deposit_identifier_bytes.append(&mut private_note_sum_bytes);
-    deposit_identifier_bytes.append(&mut token_type_bytes);
-    deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
-
-    let input =  deposit_identifier_bytes; 
-    println!("input size = {:?}", input.len());
-
-    /*let digest = sum256_32(&input);
-
-    let mut digest_words: Vec<Fr> = Vec::new();
-
-    for val in digest {
-        println!("d@ = {:#x}", val);
-        digest_words.push(Fr::from(val as u64));
     }*/
 
-    let mut pub_inputs = vec![private_note_sum, token_type];
-    pub_inputs.push(digest);
+    let pk_x_limb_0 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
+    let pk_x_limb_1 = consume_uint128_11(&pk.x.to_bytes().to_vec()[11..22]);
+    let pk_x_limb_2 = consume_uint128_10(&pk.x.to_bytes().to_vec()[22..]);
+
+    let pk_y_limb_0 = consume_uint128_11(&pk.y.to_bytes().to_vec()[0..11]);
+    let pk_y_limb_1 = consume_uint128_11(&pk.y.to_bytes().to_vec()[11..22]);
+    let pk_y_limb_2 = consume_uint128_10(&pk.y.to_bytes().to_vec()[22..]);
+
+
+    let key_data_sum = (sk_raw as u128) + pk_x_limb_0 + pk_x_limb_1 + pk_x_limb_2 + pk_y_limb_0 + pk_y_limb_1 + pk_y_limb_2;
+
+    let key_data_sum = Fr::from_u128(key_data_sum);
+
+    let digest = poseidon_hash([key_data_sum, deposit_identifier_data_sum]);
+
+
+    let mut pub_inputs = vec![private_note_sum, token_type, digest];
+    
 
     let circuit: DarkDexCircuit = DarkDexCircuit::new(Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g));
 
