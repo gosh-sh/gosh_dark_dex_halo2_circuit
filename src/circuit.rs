@@ -492,6 +492,7 @@ fn simple_test() {
 
     let key_data_sum = Fr::from_u128(key_data_sum);
 
+
     let digest = poseidon_hash([key_data_sum, deposit_identifier_data_sum]);
 
 

@@ -1,4 +1,4 @@
-use crate::sha256::*;
+use crate::utils::*;
 use crate::prover::*;
 use crate::verifier::*;
 use crate::circuit::*;
@@ -16,6 +16,7 @@ use halo2_base::halo2_proofs::{
     halo2curves::{bn256::Fr, secp256k1::{Fp, Fq, Secp256k1Affine}},
     plonk::Fixed,
 };
+use halo2_proofs::halo2curves::ff::PrimeField;
 use halo2_proofs::plonk::VerifyingKey;
 use halo2_proofs::{
     halo2curves::bn256::{Bn256, G1Affine},
@@ -31,6 +32,8 @@ use halo2_proofs::{
     transcript::{TranscriptReadBuffer, TranscriptWriterBuffer, Blake2bRead, Blake2bWrite, Challenge255},
 };
 use halo2_proofs::SerdeFormat;
+
+
 use rand::random;
 use std::{
     fs::File,
@@ -42,6 +45,8 @@ use halo2_base::utils::ScalarField;
 
 use rand::rngs::OsRng;
 
+use halo2_ecc::fields::PrimeField as OtherPrimeField;
+
 #[test]
 fn kzg_test_() {
     let sk_raw = random::<u64>();
@@ -52,46 +57,30 @@ fn kzg_test_() {
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
     let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
     let g = Secp256k1Affine::generator();
+    
     let token_type = Fr::from(token_type_raw);
     let private_note_sum = Fr::from(private_note_sum_raw);
     let vault_rand_val = Fr::from(vault_rand_val_raw);
-    
-    let sk_bytes: [u8; 8]  = sk.to_bytes()[..8].try_into().unwrap();
-    let mut private_note_sum_bytes: Vec<u8> = private_note_sum.to_bytes_le()[..8].try_into().unwrap();
-    let mut token_type_bytes: Vec<u8> = token_type.to_bytes_le()[..8].try_into().unwrap();
-    let mut vault_rand_val_bytes: Vec<u8> = vault_rand_val.to_bytes_le()[..8].try_into().unwrap();
 
-    println!("pk.x.to_bytes().to_vec() = {:?}", pk.x.to_bytes().to_vec());
-    println!("pk.x.to_bytes().to_vec() size = {:?}", pk.x.to_bytes().to_vec().len());
-    println!("pk.y.to_bytes().to_vec() = {:?}", pk.y.to_bytes().to_vec());
-    println!("pk.y.to_bytes().to_vec() size = {:?}", pk.y.to_bytes().to_vec().len());
+    let deposit_identifier_data_sum  = token_type + private_note_sum + vault_rand_val;
 
-    println!("sk_bytes = {:?}", sk_bytes);
-    println!("token_type_bytes = {:?}", token_type_bytes);
-    println!("vault_rand_val_bytes = {:?}", vault_rand_val_bytes);
-    println!("private_note_sum_bytes = {:?}", private_note_sum_bytes);
+    let pk_x_limb_0 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
+    let pk_x_limb_1 = consume_uint128_11(&pk.x.to_bytes().to_vec()[11..22]);
+    let pk_x_limb_2 = consume_uint128_10(&pk.x.to_bytes().to_vec()[22..]);
 
-    let mut deposit_identifier_bytes = sk_bytes.to_vec();
-    deposit_identifier_bytes.append(&mut pk.x.to_bytes().to_vec());
-    deposit_identifier_bytes.append(&mut pk.y.to_bytes().to_vec());
-    deposit_identifier_bytes.append(&mut private_note_sum_bytes);
-    deposit_identifier_bytes.append(&mut token_type_bytes);
-    deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
+    let pk_y_limb_0 = consume_uint128_11(&pk.y.to_bytes().to_vec()[0..11]);
+    let pk_y_limb_1 = consume_uint128_11(&pk.y.to_bytes().to_vec()[11..22]);
+    let pk_y_limb_2 = consume_uint128_10(&pk.y.to_bytes().to_vec()[22..]);
 
-    let input =  deposit_identifier_bytes; 
-    println!("input size = {:?}", input.len());
 
-    let digest = sum256_32(&input);
+    let key_data_sum = (sk_raw as u128) + pk_x_limb_0 + pk_x_limb_1 + pk_x_limb_2 + pk_y_limb_0 + pk_y_limb_1 + pk_y_limb_2;
 
-    let mut digest_words: Vec<Fr> = Vec::new();
+    let key_data_sum = Fr::from_u128(key_data_sum);
 
-    for val in digest {
-        println!("d@ = {:#x}", val);
-        digest_words.push(Fr::from(val as u64));
-    }
+    let digest = poseidon_hash([key_data_sum, deposit_identifier_data_sum]);
 
-    let mut pub_inputs = vec![token_type, private_note_sum];
-    pub_inputs.append(&mut digest_words);
+
+    let mut pub_inputs = vec![private_note_sum, token_type, digest];
 
     //////
 
@@ -148,7 +137,6 @@ fn generate_and_backup_verification_key_test() {
     generate_verififcation_key_without_witness_and_backup(&params, "verification_key.bin".to_string());
 }
 
-
 #[test]
 fn full_test_with_backuped_params() {
     let sk_raw = random::<u64>();
@@ -159,48 +147,34 @@ fn full_test_with_backuped_params() {
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
     let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
     let g = Secp256k1Affine::generator();
+    
     let token_type = Fr::from(token_type_raw);
     let private_note_sum = Fr::from(private_note_sum_raw);
     let vault_rand_val = Fr::from(vault_rand_val_raw);
+
+    let deposit_identifier_data_sum  = token_type + private_note_sum + vault_rand_val;
+
+    let pk_x_limb_0 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
+    let pk_x_limb_1 = consume_uint128_11(&pk.x.to_bytes().to_vec()[11..22]);
+    let pk_x_limb_2 = consume_uint128_10(&pk.x.to_bytes().to_vec()[22..]);
+
+    let pk_y_limb_0 = consume_uint128_11(&pk.y.to_bytes().to_vec()[0..11]);
+    let pk_y_limb_1 = consume_uint128_11(&pk.y.to_bytes().to_vec()[11..22]);
+    let pk_y_limb_2 = consume_uint128_10(&pk.y.to_bytes().to_vec()[22..]);
+
+
+    let key_data_sum = (sk_raw as u128) + pk_x_limb_0 + pk_x_limb_1 + pk_x_limb_2 + pk_y_limb_0 + pk_y_limb_1 + pk_y_limb_2;
+
+    let key_data_sum = Fr::from_u128(key_data_sum);
+
+    let digest = poseidon_hash([key_data_sum, deposit_identifier_data_sum]);
     
-    let sk_bytes: [u8; 8]  = sk.to_bytes()[..8].try_into().unwrap();
-    let mut private_note_sum_bytes: Vec<u8> = private_note_sum.to_bytes_le()[..8].try_into().unwrap();
-    let mut token_type_bytes: Vec<u8> = token_type.to_bytes_le()[..8].try_into().unwrap();
-    let mut vault_rand_val_bytes: Vec<u8> = vault_rand_val.to_bytes_le()[..8].try_into().unwrap();
 
-    println!("pk.x.to_bytes().to_vec() = {:?}", pk.x.to_bytes().to_vec());
-    println!("pk.x.to_bytes().to_vec() size = {:?}", pk.x.to_bytes().to_vec().len());
-    println!("pk.y.to_bytes().to_vec() = {:?}", pk.y.to_bytes().to_vec());
-    println!("pk.y.to_bytes().to_vec() size = {:?}", pk.y.to_bytes().to_vec().len());
+    println!("digest: {:?}", digest.to_bytes());
 
-    println!("sk_bytes = {:?}", sk_bytes);
-    println!("token_type_bytes = {:?}", token_type_bytes);
-    println!("vault_rand_val_bytes = {:?}", vault_rand_val_bytes);
-    println!("private_note_sum_bytes = {:?}", private_note_sum_bytes);
+    let mut pub_inputs = vec![private_note_sum, token_type, digest];
 
-    let mut deposit_identifier_bytes = sk_bytes.to_vec();
-    deposit_identifier_bytes.append(&mut pk.x.to_bytes().to_vec());
-    deposit_identifier_bytes.append(&mut pk.y.to_bytes().to_vec());
-    deposit_identifier_bytes.append(&mut private_note_sum_bytes);
-    deposit_identifier_bytes.append(&mut token_type_bytes);
-    deposit_identifier_bytes.append(&mut vault_rand_val_bytes);
-
-    let input =  deposit_identifier_bytes; 
-    println!("input size = {:?}", input.len());
-
-    let digest = sum256_32(&input);
-
-    let mut digest_words: Vec<Fr> = Vec::new();
-
-    for val in digest {
-        println!("d@ = {:#x}", val);
-        digest_words.push(Fr::from(val as u64));
-    }
-
-    println!("digest_words = {:?}", digest_words);
-
-    let mut pub_inputs = vec![token_type, private_note_sum];
-    pub_inputs.append(&mut digest_words);
+    
 
     /////
 
@@ -221,17 +195,12 @@ fn verifier_sketch_test() {
     let token_type_pub = 1u64;
     let private_note_sum_pub =  1000u64;
   
-    let deposit_identifier_digest: Vec<u64> = vec![0x00000000000000000000000000000000000000000000000000000000bb996d95,0x0000000000000000000000000000000000000000000000000000000023400a35, 0x00000000000000000000000000000000000000000000000000000000d80d7096, 0x0000000000000000000000000000000000000000000000000000000021077933, 0x00000000000000000000000000000000000000000000000000000000709a8d97, 0x00000000000000000000000000000000000000000000000000000000aaecedde, 0x00000000000000000000000000000000000000000000000000000000eda92a8a, 0x000000000000000000000000000000000000000000000000000000001a98705f];
-
-    let mut deposit_identifier_digest_: Vec<Fr> = Vec::new();
-    for d in deposit_identifier_digest{
-        deposit_identifier_digest_.push(Fr::from(d));
-    }
+    let digest: [u8; 32]  = [122, 190, 56, 208, 35, 15, 120, 56, 34, 228, 132, 254, 237, 5, 88, 120, 63, 201, 85, 89, 116, 224, 105, 51, 132, 36, 71, 186, 214, 214, 128, 10];
     let params = read_kzg_params("kzg_params.bin".to_string());
     let mut proof: Vec<u8> = std::fs::read("proof.bin".to_string()).unwrap();
     let vk_from_empty: VerifyingKey<G1Affine> = verification_key_from_path("verification_key.bin".to_string());
-    let mut pub_inputs = vec![Fr::from(token_type_pub), Fr::from(private_note_sum_pub)];
-    pub_inputs.append(&mut deposit_identifier_digest_);
+    let mut pub_inputs = vec![Fr::from(private_note_sum_pub), Fr::from(token_type_pub), Fr::from_bytes(&digest).unwrap()];
+   
     assert!(verify_proof_(&params, &proof, &vk_from_empty, pub_inputs));
 }
 

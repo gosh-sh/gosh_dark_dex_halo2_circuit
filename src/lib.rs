@@ -5,8 +5,9 @@ pub mod poseidon_try;
 pub mod poseidon;
 
 pub mod utils;
-//#[cfg(test)]
-//mod test;
+
+#[cfg(test)]
+mod test;
 
 
 

@@ -73,7 +73,7 @@ pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private
     let end  = now.elapsed().as_millis();
     println!("proof generation time: {:?}", end);
 
-     /*let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+    /*let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
     let strategy = SingleStrategy::new(&params);
 
 
