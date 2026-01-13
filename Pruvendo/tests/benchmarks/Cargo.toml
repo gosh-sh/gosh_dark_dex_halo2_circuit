@@ -1,0 +1,30 @@
+[package]
+name = "darkdex_benchmarks"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+gosh_dark_dex_halo2_circuit = { path = "../../.." }
+
+halo2-base = { git = "https://github.com/scroll-tech/halo2-lib", branch = "develop", default-features = false, features = ["halo2-pse", "display"] }
+halo2_proofs = { git = "https://github.com/scroll-tech/halo2.git", branch = "v1.1" }
+
+rand = "0.8"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[patch.crates-io]
+halo2curves = { git = "https://github.com/scroll-tech/halo2curves", branch = "v0.1.0" }
+
+[patch."https://github.com/privacy-scaling-explorations/halo2.git"]
+halo2_proofs = { git = "https://github.com/scroll-tech/halo2.git", branch = "v1.1" }
+
+[patch."https://github.com/privacy-scaling-explorations/bls12_381"]
+bls12_381 = { git = "https://github.com/scroll-tech/bls12_381", branch = "feat/impl_scalar_field" }
+
+[[bench]]
+name = "circuit_benchmarks"
+harness = false
+

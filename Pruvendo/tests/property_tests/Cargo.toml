@@ -1,0 +1,34 @@
+[package]
+name = "darkdex_property_tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Тесты необходимо запускать из корня проекта:
+# cd /path/to/gosh_dark_dex_halo2_circuit && cargo test -p darkdex_property_tests --release
+# или с манифестом:
+# cargo test --manifest-path Pruvendo/tests/property_tests/Cargo.toml --release
+
+[dependencies]
+# Основной проект как зависимость
+gosh_dark_dex_halo2_circuit = { path = "../../.." }
+
+# Необходимые зависимости Halo2 (те же версии что в основном проекте)
+halo2_proofs = { git = "https://github.com/scroll-tech/halo2.git", branch = "v1.1" }
+halo2-base = { git = "https://github.com/scroll-tech/halo2-lib", branch = "develop", default-features = false, features = ["halo2-pse", "display"] }
+halo2-ecc = { git = "https://github.com/scroll-tech/halo2-lib", branch = "develop", default-features = false, features = ["halo2-pse", "display"] }
+
+rand = "0.8"
+
+[dev-dependencies]
+proptest = "1.4"
+
+[patch.crates-io]
+halo2curves = { git = "https://github.com/scroll-tech/halo2curves", branch = "v0.1.0" }
+
+[patch."https://github.com/privacy-scaling-explorations/halo2.git"]
+halo2_proofs = { git = "https://github.com/scroll-tech/halo2.git", branch = "v1.1" }
+
+[patch."https://github.com/privacy-scaling-explorations/bls12_381"]
+bls12_381 = { git = "https://github.com/scroll-tech/bls12_381", branch = "feat/impl_scalar_field" }
+

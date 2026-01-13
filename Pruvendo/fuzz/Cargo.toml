@@ -1,0 +1,110 @@
+[package]
+name = "gosh_dark_dex_halo2_circuit-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+# Основной проект (уже содержит все нужные зависимости)
+# Симлинк fuzz -> Pruvendo/fuzz, поэтому путь ".." ведёт к корню
+gosh_dark_dex_halo2_circuit = { path = ".." }
+
+# Используем те же версии что и основной проект
+halo2_proofs = { git = "https://github.com/scroll-tech/halo2.git", branch = "v1.1" }
+halo2-base = { git = "https://github.com/scroll-tech/halo2-lib", branch = "develop", default-features = false, features = ["halo2-pse", "display"] }
+
+# Для импортов halo2curves
+halo2curves = { git = "https://github.com/scroll-tech/halo2curves", branch = "v0.1.0" }
+
+# Патчи из основного проекта
+[patch.crates-io]
+halo2curves = { git = "https://github.com/scroll-tech/halo2curves", branch = "v0.1.0" }
+
+[patch."https://github.com/privacy-scaling-explorations/halo2.git"]
+halo2_proofs = { git = "https://github.com/scroll-tech/halo2.git", branch = "v1.1" }
+
+[patch."https://github.com/privacy-scaling-explorations/bls12_381"]
+bls12_381 = { git = "https://github.com/scroll-tech/bls12_381", branch = "feat/impl_scalar_field" }
+
+[[bin]]
+name = "fuzz_soundness"
+path = "fuzz_targets/fuzz_soundness.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_completeness"
+path = "fuzz_targets/fuzz_completeness.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_determinism"
+path = "fuzz_targets/fuzz_determinism.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_verifier_bytes"
+path = "fuzz_targets/fuzz_verifier_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_token_binding"
+path = "fuzz_targets/fuzz_token_binding.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_sum_binding"
+path = "fuzz_targets/fuzz_sum_binding.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_edge_cases"
+path = "fuzz_targets/fuzz_edge_cases.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_proof_mutations"
+path = "fuzz_targets/fuzz_proof_mutations.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_soundness_extended"
+path = "fuzz_targets/fuzz_soundness_extended.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_proving_key_bytes"
+path = "fuzz_targets/fuzz_proving_key_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_structured_proof"
+path = "fuzz_targets/fuzz_structured_proof.rs"
+test = false
+doc = false
+bench = false

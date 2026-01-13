@@ -1,0 +1,38 @@
+# Build artifacts
+**/target/
+
+# Fuzz artifacts (crash inputs, corpus, coverage)
+**/artifacts/
+**/corpus/
+**/coverage/
+
+# Criterion benchmark data
+**/criterion/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Binary files (except intentionally committed)
+*.bin
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Rust build files outside target
+*.rlib
+*.rmeta
+*.d
+
