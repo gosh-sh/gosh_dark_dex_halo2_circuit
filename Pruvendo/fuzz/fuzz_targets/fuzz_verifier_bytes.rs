@@ -20,13 +20,19 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // Попытка десериализации как KZG параметров
-    // Не должна паниковать на произвольных данных
-    let mut cursor = Cursor::new(data);
-    let _ = ParamsKZG::<Bn256>::read_custom::<_>(&mut cursor, SerdeFormat::RawBytesUnchecked);
+    // Используем catch_unwind т.к. halo2curves может паниковать на corrupted данных
+    // Это известный баг в upstream библиотеке (unwrap вместо Result)
+    let data_clone = data.to_vec();
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut cursor = Cursor::new(&data_clone);
+        ParamsKZG::<Bn256>::read_custom::<_>(&mut cursor, SerdeFormat::RawBytesUnchecked)
+    }));
 
-    // Попытка десериализации как verification key
-    // Требует валидные params, поэтому просто проверяем что не паникует
-    let mut cursor2 = Cursor::new(data);
-    let _ = ParamsKZG::<Bn256>::read_custom::<_>(&mut cursor2, SerdeFormat::Processed);
+    // Попытка десериализации с Processed format
+    let data_clone2 = data.to_vec();
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut cursor2 = Cursor::new(&data_clone2);
+        ParamsKZG::<Bn256>::read_custom::<_>(&mut cursor2, SerdeFormat::Processed)
+    }));
 });
 

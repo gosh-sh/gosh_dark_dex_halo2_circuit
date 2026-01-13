@@ -2,14 +2,17 @@
 //!
 //! Содержит helpers для работы с ZKP схемой в контексте fuzzing.
 
-use gosh_dark_dex_halo2_circuit::circuit::DarkDexCircuit;
+#![allow(dead_code)]
+
+use gosh_dark_dex_halo2_circuit::circuit::{DarkDexCircuit, poseidon_hash};
+use gosh_dark_dex_halo2_circuit::utils::{consume_uint128_10, consume_uint128_11};
 use halo2_base::halo2_proofs::{
     dev::MockProver,
     halo2curves::{
         bn256::Fr,
         secp256k1::{Fq, Secp256k1Affine},
+        ff::PrimeField,
     },
-    arithmetic::CurveAffine,
 };
 use std::sync::Once;
 
@@ -87,32 +90,60 @@ impl CircuitResult {
     }
 }
 
+/// Вычисляет digest для public inputs (Poseidon hash)
+fn compute_digest(sk_raw: u64, pk: &Secp256k1Affine, token_type: Fr, private_note_sum: Fr, vault_rand_val: Fr) -> Fr {
+    let deposit_identifier_data_sum = token_type + private_note_sum + vault_rand_val;
+
+    let pk_x_limb_0 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
+    let pk_x_limb_1 = consume_uint128_11(&pk.x.to_bytes().to_vec()[11..22]);
+    let pk_x_limb_2 = consume_uint128_10(&pk.x.to_bytes().to_vec()[22..]);
+
+    let pk_y_limb_0 = consume_uint128_11(&pk.y.to_bytes().to_vec()[0..11]);
+    let pk_y_limb_1 = consume_uint128_11(&pk.y.to_bytes().to_vec()[11..22]);
+    let pk_y_limb_2 = consume_uint128_10(&pk.y.to_bytes().to_vec()[22..]);
+
+    let key_data_sum = (sk_raw as u128) + pk_x_limb_0 + pk_x_limb_1 + pk_x_limb_2 + pk_y_limb_0 + pk_y_limb_1 + pk_y_limb_2;
+    let key_data_sum = Fr::from_u128(key_data_sum);
+
+    poseidon_hash([key_data_sum, deposit_identifier_data_sum])
+}
+
 /// Проверяет схему через MockProver
 ///
-/// Сигнатура DarkDexCircuit::new:
-/// (token_type: Option<F>, private_note_sum: Option<F>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>)
+/// Сигнатура DarkDexCircuit::new после poseidon_integration:
+/// (token_type, private_note_sum, vault_rand_val, sk, pk, g)
+/// Public inputs: [private_note_sum, token_type, digest]
 pub fn check_circuit(
     sk: Fq,
     pk: Secp256k1Affine,
     g: Secp256k1Affine,
     token_type: u64,
     private_note_sum: u64,
-    public_token: u64,
-    public_sum: u64,
+    vault_rand_val: u64,
+    sk_raw: u64,  // raw sk value for digest computation
 ) -> CircuitResult {
     ensure_working_directory();
 
-    let circuit = DarkDexCircuit::<Fr>::new(
-        Some(Fr::from(token_type)),
-        Some(Fr::from(private_note_sum)),
+    let token_type_fr = Fr::from(token_type);
+    let private_note_sum_fr = Fr::from(private_note_sum);
+    let vault_rand_val_fr = Fr::from(vault_rand_val);
+
+    let digest = compute_digest(sk_raw, &pk, token_type_fr, private_note_sum_fr, vault_rand_val_fr);
+
+    let circuit = DarkDexCircuit::new(
+        Some(token_type_fr),
+        Some(private_note_sum_fr),
+        Some(vault_rand_val_fr),
         Some(sk),
         Some(pk),
         Some(g),
     );
 
+    // Public inputs: [private_note_sum, token_type, digest]
     let public_inputs = vec![
-        Fr::from(public_token),
-        Fr::from(public_sum),
+        private_note_sum_fr,
+        token_type_fr,
+        digest,
     ];
 
     let prover = MockProver::run(CIRCUIT_K, &circuit, vec![public_inputs]);

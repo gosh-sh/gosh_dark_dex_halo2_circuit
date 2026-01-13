@@ -17,10 +17,9 @@ use std::io::Cursor;
 
 use halo2_proofs::SerdeFormat;
 use halo2_proofs::halo2curves::bn256::G1Affine;
-use halo2_proofs::plonk::{VerifyingKey, ProvingKey};
+use halo2_proofs::plonk::VerifyingKey;
 
 use gosh_dark_dex_halo2_circuit::circuit::DarkDexCircuit;
-use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 
 fuzz_target!(|data: &[u8]| {
     // Минимальная длина для осмысленного парсинга
@@ -31,7 +30,7 @@ fuzz_target!(|data: &[u8]| {
     // Попытка десериализации как VerifyingKey с RawBytesUnchecked
     let mut cursor = Cursor::new(data);
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        VerifyingKey::<G1Affine>::read::<_, DarkDexCircuit<Fr>>(
+        VerifyingKey::<G1Affine>::read::<_, DarkDexCircuit>(
             &mut cursor,
             SerdeFormat::RawBytesUnchecked,
         )
@@ -40,7 +39,7 @@ fuzz_target!(|data: &[u8]| {
     // Попытка десериализации как VerifyingKey с Processed format
     let mut cursor2 = Cursor::new(data);
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        VerifyingKey::<G1Affine>::read::<_, DarkDexCircuit<Fr>>(
+        VerifyingKey::<G1Affine>::read::<_, DarkDexCircuit>(
             &mut cursor2,
             SerdeFormat::Processed,
         )
@@ -51,7 +50,7 @@ fuzz_target!(|data: &[u8]| {
     if data.len() >= 968 {  // Размер реального VK файла
         let mut cursor3 = Cursor::new(data);
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            VerifyingKey::<G1Affine>::read::<_, DarkDexCircuit<Fr>>(
+            VerifyingKey::<G1Affine>::read::<_, DarkDexCircuit>(
                 &mut cursor3,
                 SerdeFormat::RawBytes,
             )

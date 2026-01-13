@@ -19,24 +19,26 @@ struct DeterminismInput {
     sk_seed: u64,
     token_type: u64,
     note_sum: u64,
+    vault_rand_val: u64,
 }
 
 fuzz_target!(|input: DeterminismInput| {
     if input.sk_seed == 0 {
         return;
     }
-    
+
     let token = input.token_type % 1_000_000;
     let sum = input.note_sum % 1_000_000_000;
-    
+    let vault = input.vault_rand_val % 1_000_000;
+
     let (sk, pk, g) = generate_valid_keypair(input.sk_seed);
-    
+
     // Первый запуск
-    let result1 = check_circuit(sk, pk, g, token, sum, token, sum);
-    
+    let result1 = check_circuit(sk, pk, g, token, sum, vault, input.sk_seed);
+
     // Второй запуск с теми же параметрами
-    let result2 = check_circuit(sk, pk, g, token, sum, token, sum);
-    
+    let result2 = check_circuit(sk, pk, g, token, sum, vault, input.sk_seed);
+
     // ASSERTION: результаты должны совпадать
     assert_eq!(
         result1, result2,

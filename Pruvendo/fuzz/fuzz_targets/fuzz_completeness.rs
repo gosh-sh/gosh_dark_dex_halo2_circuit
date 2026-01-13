@@ -22,6 +22,8 @@ struct CompletenessInput {
     token_type: u64,
     /// Сумма
     note_sum: u64,
+    /// Vault random value
+    vault_rand_val: u64,
 }
 
 fuzz_target!(|input: CompletenessInput| {
@@ -29,14 +31,15 @@ fuzz_target!(|input: CompletenessInput| {
     if input.sk_seed == 0 {
         return;
     }
-    
+
     // Ограничиваем значения
     let token = input.token_type % 1_000_000;
     let sum = input.note_sum % 1_000_000_000;
-    
+    let vault = input.vault_rand_val % 1_000_000;
+
     // Генерируем ВАЛИДНУЮ пару: pk = sk * G
     let (sk, pk, g) = generate_valid_keypair(input.sk_seed);
-    
+
     // Проверяем схему с совпадающими witness и public inputs
     let result = check_circuit(
         sk,
@@ -44,10 +47,10 @@ fuzz_target!(|input: CompletenessInput| {
         g,
         token,
         sum,
-        token,  // public input = witness
-        sum,    // public input = witness
+        vault,
+        input.sk_seed,  // sk_raw для digest
     );
-    
+
     // ASSERTION: валидная пара ДОЛЖНА быть принята
     assert!(
         result.is_ok(),

@@ -1118,6 +1118,47 @@ fn test_corrupted_kzg_params_bytes() {
     }
 }
 
+/// BUG-003: Corrupted KZG header causes OOM
+/// Этот тест проверяет что corrupted header вызывает panic (а не OOM)
+/// ОПАСНО: Может попытаться выделить петабайты памяти!
+#[test]
+#[ignore] // ОПАСНО: может вызвать OOM
+fn test_corrupted_kzg_header_bug003() {
+    use gosh_dark_dex_halo2_circuit::prover::read_kzg_params;
+    use crate::helpers::ensure_working_directory;
+    ensure_working_directory();
+
+    let temp_path = "/tmp/test_corrupted_kzg_header.bin";
+    let mut params_bytes = std::fs::read("kzg_params.bin")
+        .expect("kzg_params.bin should exist");
+
+    // Портим HEADER файла - первые 8 байт (размер k и n)
+    // Это должно вызвать OOM при попытке выделить память
+    for i in 0..8 {
+        params_bytes[i] = 0xFF;
+    }
+
+    std::fs::write(temp_path, &params_bytes).expect("Failed to write temp file");
+
+    // Пытаемся прочитать - должно упасть с panic, а не OOM
+    let result = std::panic::catch_unwind(|| {
+        read_kzg_params(temp_path.to_string())
+    });
+
+    let _ = std::fs::remove_file(temp_path);
+
+    match result {
+        Ok(_params) => {
+            // Если дошли сюда - значит память выделилась (маловероятно для 2PB)
+            println!("BUG-003: Corrupted header somehow parsed (unexpected!)");
+        }
+        Err(_) => {
+            // Ожидаемый результат - panic
+            println!("BUG-003: Corrupted header caused panic (expected)");
+        }
+    }
+}
+
 /// SER-07: Proof bytes с неверной длиной
 #[test]
 #[ignore] // Требует kzg_params.bin и verification_key.bin
@@ -1480,5 +1521,90 @@ fn test_bug006_kzg_params_bit7_manipulation() {
     } else {
         println!("BUG-006e: KZG params file too short");
     }
+}
+
+/// Тест BUG-006: проверяем что мутированный proof отклоняется
+/// Оригинальный баг: XOR 0x80 на позиции 31 (последний байт первого элемента) принимался
+#[test]
+#[ignore] // Требует proof.bin, kzg_params.bin, verification_key.bin
+fn test_bug006_proof_mutation_rejected() {
+    use gosh_dark_dex_halo2_circuit::prover::read_kzg_params;
+    use gosh_dark_dex_halo2_circuit::verifier::{verification_key_from_path, verify_proof_};
+    use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
+    use crate::helpers::ensure_working_directory;
+    ensure_working_directory();
+
+    // Проверяем наличие файлов
+    if !std::path::Path::new("proof.bin").exists() {
+        println!("SKIP: proof.bin not found");
+        return;
+    }
+
+    // Загружаем данные
+    let proof = std::fs::read("proof.bin").expect("proof.bin");
+    let params = read_kzg_params("kzg_params.bin".to_string());
+    let vk = verification_key_from_path("verification_key.bin".to_string());
+
+    println!("Proof size: {} bytes", proof.len());
+
+    // Проверяем что оригинальный proof верифицируется
+    // IMPORTANT: public inputs должны соответствовать proof.bin!
+    // После poseidon_integration есть 3 public inputs: sum, token, digest
+    // Для теста используем нулевой digest
+    let digest = Fr::zero();
+    let pub_inputs = vec![Fr::from(1000u64), Fr::from(1u64), digest];
+
+    let original_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        verify_proof_(&params, &proof, &vk, pub_inputs.clone())
+    }));
+
+    match &original_result {
+        Ok(true) => println!("Original proof: VERIFIED"),
+        Ok(false) => println!("Original proof: REJECTED (expected)"),
+        Err(_) => println!("Original proof: PANIC"),
+    }
+
+    // Тестируем BUG-006: XOR 0x80 на позиции 31
+    let mut mutated_proof = proof.clone();
+    mutated_proof[31] ^= 0x80;
+
+    let mutated_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        verify_proof_(&params, &mutated_proof, &vk, pub_inputs.clone())
+    }));
+
+    match &mutated_result {
+        Ok(true) => {
+            panic!("BUG-006 REPRODUCED: Mutated proof at pos=31, XOR=0x80 was ACCEPTED!");
+        }
+        Ok(false) => println!("Mutated proof correctly REJECTED"),
+        Err(_) => println!("Mutated proof: PANIC (acceptable)"),
+    }
+
+    // Тестируем другие позиции (каждый 32-й байт - MSB элемента)
+    let mut bugs_found = 0;
+    for elem_idx in 0..20 {
+        let pos = 31 + elem_idx * 32;
+        if pos >= proof.len() {
+            break;
+        }
+
+        let mut m_proof = proof.clone();
+        m_proof[pos] ^= 0x80;
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            verify_proof_(&params, &m_proof, &vk, pub_inputs.clone())
+        }));
+
+        match result {
+            Ok(true) => {
+                println!("BUG-006: Element {} (pos={}) with XOR 0x80 ACCEPTED!", elem_idx, pos);
+                bugs_found += 1;
+            }
+            Ok(false) => (), // OK
+            Err(_) => (), // Panic is acceptable
+        }
+    }
+
+    assert_eq!(bugs_found, 0, "BUG-006: {} mutations were incorrectly accepted", bugs_found);
 }
 

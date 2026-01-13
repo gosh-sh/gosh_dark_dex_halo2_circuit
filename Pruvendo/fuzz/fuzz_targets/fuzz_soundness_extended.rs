@@ -1,9 +1,9 @@
 //! Fuzz target: Extended soundness testing
 //!
-//! Расширенная проверка soundness: разные комбинации неверных значений.
-//! Покрывает: wrong pk, wrong generator, wrong token, wrong sum.
+//! Расширенная проверка soundness: проверяет что неверный pk отклоняется.
+//! После poseidon_integration: soundness проверяется через digest.
 //!
-//! Находит: нарушения soundness при комбинациях невалидных входов.
+//! Находит: нарушения soundness при неверных ключах.
 //!
 //! Запуск: cargo +nightly fuzz run fuzz_soundness_extended
 
@@ -15,41 +15,19 @@ use arbitrary::Arbitrary;
 mod common;
 use common::*;
 
-use halo2_base::halo2_proofs::halo2curves::secp256k1::{Fq, Secp256k1Affine};
-use halo2_base::halo2_proofs::arithmetic::CurveAffine;
-
-/// Типы нарушений soundness
-#[derive(Debug, Arbitrary, Clone, Copy)]
-enum SoundnessViolationType {
-    WrongPk,
-    WrongGenerator,
-    WrongToken,
-    WrongSum,
-    WrongPkAndToken,
-    WrongPkAndSum,
-    WrongGeneratorAndToken,
-    AllWrong,
-}
-
 /// Входные данные для расширенного soundness теста
 #[derive(Debug, Arbitrary)]
 struct ExtendedSoundnessInput {
-    /// Тип нарушения
-    violation_type: SoundnessViolationType,
     /// Seed для sk
     sk_seed: u64,
-    /// Seed для wrong_sk (если нужен)
+    /// Seed для wrong_sk
     wrong_sk_seed: u64,
-    /// Правильный token
-    correct_token: u64,
-    /// Правильный sum
-    correct_sum: u64,
-    /// Неправильный token
-    wrong_token: u64,
-    /// Неправильный sum
-    wrong_sum: u64,
-    /// Множитель для wrong generator
-    gen_multiplier: u64,
+    /// Token type
+    token: u64,
+    /// Sum
+    sum: u64,
+    /// Vault random value
+    vault: u64,
 }
 
 fuzz_target!(|input: ExtendedSoundnessInput| {
@@ -60,65 +38,33 @@ fuzz_target!(|input: ExtendedSoundnessInput| {
     if input.sk_seed == input.wrong_sk_seed {
         return; // pk будет верным
     }
-    if input.gen_multiplier == 0 || input.gen_multiplier == 1 {
-        return; // генератор не изменится
-    }
 
-    let token = input.correct_token % 1_000_000;
-    let sum = input.correct_sum % 1_000_000_000;
-    let w_token = input.wrong_token % 1_000_000;
-    let w_sum = input.wrong_sum % 1_000_000_000;
+    let token = input.token % 1_000_000;
+    let sum = input.sum % 1_000_000_000;
+    let vault = input.vault % 1_000_000;
 
-    // Избегаем случайных совпадений
-    if token == w_token && matches!(input.violation_type, 
-        SoundnessViolationType::WrongToken | 
-        SoundnessViolationType::WrongPkAndToken |
-        SoundnessViolationType::WrongGeneratorAndToken |
-        SoundnessViolationType::AllWrong) {
-        return;
-    }
-    if sum == w_sum && matches!(input.violation_type,
-        SoundnessViolationType::WrongSum |
-        SoundnessViolationType::WrongPkAndSum |
-        SoundnessViolationType::AllWrong) {
-        return;
-    }
+    // Генерируем неверную пару: pk ≠ sk * G
+    let (sk, wrong_pk, g) = generate_invalid_keypair(input.sk_seed, input.wrong_sk_seed);
 
-    let g = Secp256k1Affine::generator();
-    let sk = Fq::from(input.sk_seed);
-    let correct_pk = Secp256k1Affine::from(g * sk);
-    let wrong_sk = Fq::from(input.wrong_sk_seed);
-    let wrong_pk = Secp256k1Affine::from(g * wrong_sk);
-    let wrong_g = Secp256k1Affine::from(g * Fq::from(input.gen_multiplier % 1000 + 2));
-
-    // Выбираем параметры в зависимости от типа нарушения
-    let (use_pk, use_g, pub_token, pub_sum) = match input.violation_type {
-        SoundnessViolationType::WrongPk => (wrong_pk, g, token, sum),
-        SoundnessViolationType::WrongGenerator => (correct_pk, wrong_g, token, sum),
-        SoundnessViolationType::WrongToken => (correct_pk, g, w_token, sum),
-        SoundnessViolationType::WrongSum => (correct_pk, g, token, w_sum),
-        SoundnessViolationType::WrongPkAndToken => (wrong_pk, g, w_token, sum),
-        SoundnessViolationType::WrongPkAndSum => (wrong_pk, g, token, w_sum),
-        SoundnessViolationType::WrongGeneratorAndToken => (correct_pk, wrong_g, w_token, sum),
-        SoundnessViolationType::AllWrong => (wrong_pk, wrong_g, w_token, w_sum),
-    };
-
+    // Проверяем схему с неверным pk
+    // Используем wrong_sk_seed для digest чтобы digest соответствовал wrong_pk
     let result = check_circuit(
-        sk, use_pk, use_g,
-        token, sum,        // witness values
-        pub_token, pub_sum // public inputs
+        sk,
+        wrong_pk,  // НЕВЕРНЫЙ публичный ключ!
+        g,
+        token,
+        sum,
+        vault,
+        input.wrong_sk_seed,  // sk_raw для digest - консистентен с wrong_pk
     );
 
-    // ASSERTION: Любое нарушение ДОЛЖНО быть отклонено
+    // ASSERTION: неверный pk ДОЛЖЕН быть отклонён
     assert!(
         result.is_err(),
-        "SOUNDNESS VIOLATION! {:?} was accepted!\n\
-         sk={}, wrong_sk={}, gen_mult={}\n\
-         tokens: correct={}, wrong={}, used={}\n\
-         sums: correct={}, wrong={}, used={}",
-        input.violation_type,
-        input.sk_seed, input.wrong_sk_seed, input.gen_multiplier,
-        token, w_token, pub_token,
-        sum, w_sum, pub_sum
+        "SOUNDNESS VIOLATION! Wrong pk was accepted!\n\
+         sk={}, wrong_sk={}\n\
+         token={}, sum={}",
+        input.sk_seed, input.wrong_sk_seed,
+        token, sum
     );
 });

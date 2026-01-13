@@ -36,29 +36,27 @@ enum EdgeCaseType {
     /// Все максимальные
     AllMax,
     /// Случайная комбинация
-    Random(u64, u64, u64),
+    Random(u64, u64, u64, u64),
 }
 
 fuzz_target!(|edge_case: EdgeCaseType| {
-    let (sk_val, token_type, note_sum) = match edge_case {
-        EdgeCaseType::ZeroSk => (0u64, 1u64, 1000u64),
-        EdgeCaseType::OneSk => (1u64, 1u64, 1000u64),
+    let (sk_val, token_type, note_sum, vault_rand) = match edge_case {
+        EdgeCaseType::ZeroSk => (0u64, 1u64, 1000u64, 111u64),
+        EdgeCaseType::OneSk => (1u64, 1u64, 1000u64, 111u64),
         EdgeCaseType::LargeSk(v) => {
             // Используем большое значение, но не переполняем
             let large = (v % u64::MAX).saturating_add(1_000_000_000);
-            (large, 1u64, 1000u64)
+            (large, 1u64, 1000u64, 111u64)
         }
-        EdgeCaseType::ZeroToken => (12345u64, 0u64, 1000u64),
-        EdgeCaseType::ZeroSum => (12345u64, 1u64, 0u64),
-        EdgeCaseType::AllZero => (0u64, 0u64, 0u64),
-        EdgeCaseType::AllMax => (u64::MAX, u64::MAX, u64::MAX),
-        EdgeCaseType::Random(sk, token, sum) => (sk, token, sum),
+        EdgeCaseType::ZeroToken => (12345u64, 0u64, 1000u64, 111u64),
+        EdgeCaseType::ZeroSum => (12345u64, 1u64, 0u64, 111u64),
+        EdgeCaseType::AllZero => (0u64, 0u64, 0u64, 0u64),
+        EdgeCaseType::AllMax => (u64::MAX, u64::MAX, u64::MAX, u64::MAX),
+        EdgeCaseType::Random(sk, token, sum, vault) => (sk, token, sum, vault),
     };
 
     // Пропускаем sk=0 так как это приводит к invalid point
     if sk_val == 0 {
-        // Проверяем что хотя бы не паникует
-        let g = halo2_base::halo2_proofs::halo2curves::secp256k1::Secp256k1Affine::generator();
         // sk=0 означает pk = identity point, что может быть edge case
         return;
     }
@@ -74,10 +72,10 @@ fuzz_target!(|edge_case: EdgeCaseType| {
         g,
         token_type,
         note_sum,
-        token_type,
-        note_sum,
+        vault_rand,
+        sk_val,  // sk_raw для digest
     );
-    
+
     // Если дошли сюда - граничный случай обработан без паники ✓
 });
 

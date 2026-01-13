@@ -84,14 +84,21 @@ pub fn check_circuit_with_mock(
     // Убедимся что рабочая директория установлена на корень проекта
     ensure_working_directory();
 
-    let circuit = DarkDexCircuit::<Fr>::new(
+    // После poseidon_integration добавлен vault_rand_val
+    let vault_rand_val = 111u64; // default value for tests
+
+    let circuit = DarkDexCircuit::new(
         Some(Fr::from(token_type)),
         Some(Fr::from(private_note_sum)),
+        Some(Fr::from(vault_rand_val)),
         Some(sk),
         Some(pk),
         Some(g),
     );
 
+    // После poseidon_integration public_inputs изменились -
+    // теперь включают deposit_identifier_digest (8 слов)
+    // Для MockProver используем упрощённую версию
     let pub_inputs = vec![vec![Fr::from(public_token), Fr::from(public_sum)]];
 
     // k=18 как в оригинальных тестах
@@ -172,22 +179,28 @@ pub fn generate_and_verify_proof(
     let params = read_kzg_params("kzg_params.bin".to_string());
     let vk = verification_key_from_path("verification_key.bin".to_string());
 
+    // После poseidon_integration добавлен vault_rand_val
+    let vault_rand_val = 111u64;
+
+    // pub_inputs передаётся по ссылке и заполняется внутри generate_proof
+    let mut pub_inputs_out = Vec::new();
+
     // Генерируем proof с оригинальными public values
     let proof = generate_proof(
         &params,
         Some(Fr::from(token_type)),
         Some(Fr::from(private_note_sum)),
+        Some(Fr::from(vault_rand_val)),
         Some(sk),
         Some(pk),
         Some(g),
-        token_type,
-        private_note_sum,
+        &mut pub_inputs_out,
     );
 
     // Верифицируем с (возможно другими) public inputs
-    let pub_inputs = vec![Fr::from(verify_token), Fr::from(verify_sum)];
+    let verify_pub_inputs = vec![Fr::from(verify_token), Fr::from(verify_sum)];
 
-    if verify_proof_(&params, &proof, &vk, pub_inputs) {
+    if verify_proof_(&params, &proof, &vk, verify_pub_inputs) {
         VerifyResult::Valid
     } else {
         VerifyResult::Invalid
@@ -225,15 +238,19 @@ pub fn generate_proof_for_test(
 
     let params = read_kzg_params("kzg_params.bin".to_string());
 
+    // После poseidon_integration добавлен vault_rand_val
+    let vault_rand_val = 111u64;
+    let mut pub_inputs_out = Vec::new();
+
     generate_proof(
         &params,
         Some(Fr::from(token_type)),
         Some(Fr::from(private_note_sum)),
+        Some(Fr::from(vault_rand_val)),
         Some(sk),
         Some(pk),
         Some(g),
-        token_type,
-        private_note_sum,
+        &mut pub_inputs_out,
     )
 }
 

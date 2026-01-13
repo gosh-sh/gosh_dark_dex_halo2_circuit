@@ -20,10 +20,12 @@ struct SoundnessInput {
     sk_seed: u64,
     /// Seed для НЕВЕРНОГО публичного ключа (pk = wrong_sk * G)
     wrong_sk_seed: u64,
-    /// Тип токена (witness и public input совпадают)
+    /// Тип токена
     token_type: u64,
-    /// Сумма (witness и public input совпадают)
+    /// Сумма
     note_sum: u64,
+    /// Vault random value
+    vault_rand_val: u64,
 }
 
 fuzz_target!(|input: SoundnessInput| {
@@ -31,30 +33,31 @@ fuzz_target!(|input: SoundnessInput| {
     if input.sk_seed == 0 || input.wrong_sk_seed == 0 {
         return;
     }
-    
+
     // Если sk == wrong_sk, то pk будет верным — пропускаем
     if input.sk_seed == input.wrong_sk_seed {
         return;
     }
-    
+
     // Ограничиваем значения чтобы избежать overflow
     let token = input.token_type % 1_000_000;
     let sum = input.note_sum % 1_000_000_000;
-    
+    let vault = input.vault_rand_val % 1_000_000;
+
     // Генерируем неверную пару: pk ≠ sk * G
     let (sk, wrong_pk, g) = generate_invalid_keypair(input.sk_seed, input.wrong_sk_seed);
-    
-    // Проверяем схему
+
+    // Проверяем схему - используем wrong_sk_seed для digest (неверный pk)
     let result = check_circuit(
         sk,
         wrong_pk,  // НЕВЕРНЫЙ публичный ключ!
         g,
         token,
         sum,
-        token,  // public input = witness
-        sum,    // public input = witness
+        vault,
+        input.wrong_sk_seed,  // sk_raw для digest - используем wrong чтобы digest был консистентен с wrong_pk
     );
-    
+
     // ASSERTION: неверная пара ключей ДОЛЖНА быть отклонена
     assert!(
         result.is_err(),
