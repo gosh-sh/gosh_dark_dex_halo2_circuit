@@ -61,6 +61,9 @@ use std::time::Duration;
 
 use rand::rngs::OsRng;
 
+
+use std::thread::sleep;
+
 use poseidon_base::primitives::{ConstantLength, Hash as PoseidonHash, P128Pow5T3, P128Pow5T3Compact, Spec,  CachedSpec};
 
 use poseidon_circuit::{
@@ -139,17 +142,17 @@ impl DarkDexCircuit {
 
 #[derive(Clone)]
 pub struct DarkDexConfig{
-    a: Column<Advice>,
-    b: Column<Advice>,
-    c: Column<Fixed>,
-    advices: [Column<Advice>; 5],
-    key_data: Column<Advice>,
-    deposit_identifier_data: Column<Advice>,
-    q_enable: Selector,
-    q_enable_2: Selector,
+    //a: Column<Advice>,
+    //b: Column<Advice>,
+    //c: Column<Fixed>,
+    //advices: [Column<Advice>; 5],
+    //key_data: Column<Advice>,
+    //deposit_identifier_data: Column<Advice>,
+    //q_enable: Selector,
+    //q_enable_2: Selector,
     public_inputs: Column<Instance>, /**  private_note_sum_public_val, token_type_id_public_val, deposit_identifier_digest (8 words) */
     fp_chip: FpChip::<Fr>,
-    poseidon_config: PoseidonConfig<Fr, 3, 2>,
+    //poseidon_config: PoseidonConfig<Fr, 3, 2>,
 }
 
 
@@ -183,33 +186,33 @@ impl Circuit<Fr> for DarkDexCircuit {
             params.degree as usize,
         );
 
-        let a = meta.advice_column();
-        let b = meta.advice_column();
-        let c = meta.fixed_column();
-        let deposit_identifier_data = meta.advice_column();
-        let key_data = meta.advice_column();
+        //let a = meta.advice_column();
+        //let b = meta.advice_column();
+        //let c = meta.fixed_column();
+        //let deposit_identifier_data = meta.advice_column();
+        //let key_data = meta.advice_column();
         let public_inputs = meta.instance_column();
-        meta.enable_equality(a);
-        meta.enable_equality(b);
-        meta.enable_equality(c);
-        meta.enable_equality(key_data);
-        meta.enable_equality(deposit_identifier_data);
+        //meta.enable_equality(a);
+        //meta.enable_equality(b);
+        //meta.enable_equality(c);
+        //meta.enable_equality(key_data);
+        //meta.enable_equality(deposit_identifier_data);
         meta.enable_equality(public_inputs);
 
-        let q_enable = meta.complex_selector();
-        let q_enable_2 = meta.complex_selector();
+        //let q_enable = meta.complex_selector();
+        //let q_enable_2 = meta.complex_selector();
 
-        meta.create_gate("vertical-add", |meta| {
+       /* meta.create_gate("vertical-add", |meta| {
             let w0 = meta.query_advice(deposit_identifier_data, Rotation(0));
             let w1 = meta.query_advice(deposit_identifier_data, Rotation(1));
             let w2 = meta.query_advice(deposit_identifier_data, Rotation(2));
             let w3 = meta.query_advice(deposit_identifier_data, Rotation(3));
             let q_enable = meta.query_selector(q_enable);
             vec![q_enable * ((w0 + w1 + w2) - w3)]
-        });
+        });*/
         // ANCHOR: new_gate
 
-        meta.create_gate("big-vertical-add", |meta| {
+       /* meta.create_gate("big-vertical-add", |meta| {
             let w0 = meta.query_advice(key_data, Rotation(0));
             let w1 = meta.query_advice(key_data, Rotation(1));
             let w2 = meta.query_advice(key_data, Rotation(2));
@@ -222,11 +225,11 @@ impl Circuit<Fr> for DarkDexCircuit {
             let w9 = meta.query_advice(key_data, Rotation(9));
             let q_enable_2 = meta.query_selector(q_enable_2);
             vec![q_enable_2 * ((w0 + w1 + w2 + w3 + w4 + w5 + w6 + w7 + w8) - w9)]
-        });
+        });*/
 
         /// Poseidon config
         /// 
-        let advices = [
+        /*let advices = [
             meta.advice_column(),
             meta.advice_column(),
             meta.advice_column(),
@@ -254,11 +257,11 @@ impl Circuit<Fr> for DarkDexCircuit {
             advices[0],
             lagrange_coeffs[0..3].try_into().unwrap(),
             lagrange_coeffs[3..6].try_into().unwrap(),
-        );
+        );*/
          
         ////
         
-        DarkDexConfig{ a, b, c, advices, key_data, deposit_identifier_data, q_enable, q_enable_2, public_inputs, fp_chip, poseidon_config}
+        DarkDexConfig{ /* a, b, c,advices, key_data, deposit_identifier_data, q_enable, q_enable_2,*/ public_inputs, fp_chip /*, poseidon_config*/}
     }
 
     fn synthesize(
@@ -330,17 +333,17 @@ impl Circuit<Fr> for DarkDexCircuit {
                 let y_eq = base_chip.is_equal(ctx, &pk_assigned.y, &mul.y);
 
 
-                let mut key_limbs_data: Vec<AssignedValue<Fr>> = sk_assigned.truncation.limbs.clone();
+                /*let mut key_limbs_data: Vec<AssignedValue<Fr>> = sk_assigned.truncation.limbs.clone();
                 let mut pk_x_limbs_data: Vec<AssignedValue<Fr>> = pk_assigned.x.truncation.limbs.clone();
                 key_limbs_data.append(&mut pk_x_limbs_data);
                 let mut pk_y_limbs_data: Vec<AssignedValue<Fr>> = pk_assigned.y.truncation.limbs.clone();
-                key_limbs_data.append(&mut pk_y_limbs_data);
+                key_limbs_data.append(&mut pk_y_limbs_data);*/
 
-                Ok((x_eq, y_eq, key_limbs_data))
+                Ok((x_eq, y_eq/*, key_limbs_data*/))
             }
         ).unwrap();
 
-        layouter.assign_region(
+        /*layouter.assign_region(
             || "check final equality result",
             |mut region| {
 
@@ -362,10 +365,10 @@ impl Circuit<Fr> for DarkDexCircuit {
                 let _ = region.constrain_equal(cell_y, fix).unwrap();
                 Ok(())
             }
-        ).unwrap();
+        ).unwrap();*/
 
 
-        let key_limbs_data = res.2;
+        /*let key_limbs_data = res.2;
         let key_elements_sum = layouter.assign_region(
             || "asssign key data and sum limbs",
             |mut region| {
@@ -434,9 +437,9 @@ impl Circuit<Fr> for DarkDexCircuit {
 
                 Ok(([cell_private_note_sum.cell(), cell_token_type.cell()], cell_sum))
             }
-        ).unwrap();
+        ).unwrap();*/
 
-        let deposit_identifier_data_sum: AssignedCell<Fr, Fr> = deposit_identifier_data.1;
+        /*let deposit_identifier_data_sum: AssignedCell<Fr, Fr> = deposit_identifier_data.1;
 
         let hash = poseidon_hash_gadget(
             config.poseidon_config,
@@ -448,7 +451,7 @@ impl Circuit<Fr> for DarkDexCircuit {
             layouter.constrain_instance(deposit_identifier_data.0[i], config.public_inputs, i)?;
         }
 
-        layouter.constrain_instance(hash.cell(), config.public_inputs, 2)?;
+        layouter.constrain_instance(hash.cell(), config.public_inputs, 2)?;*/
 
         
         Ok(())
@@ -491,7 +494,7 @@ fn simple_test() {
     let key_data_sum = (sk_raw as u128) + pk_x_limb_0 + pk_x_limb_1 + pk_x_limb_2 + pk_y_limb_0 + pk_y_limb_1 + pk_y_limb_2;
 
     let key_data_sum = Fr::from_u128(key_data_sum);
-
+   
 
     let digest = poseidon_hash([key_data_sum, deposit_identifier_data_sum]);
 

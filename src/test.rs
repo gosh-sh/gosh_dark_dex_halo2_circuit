@@ -47,6 +47,9 @@ use rand::rngs::OsRng;
 
 use halo2_ecc::fields::PrimeField as OtherPrimeField;
 
+use std::time::{Duration, Instant};
+use std::thread::sleep;
+
 #[test]
 fn kzg_test_() {
     let sk_raw = random::<u64>();
