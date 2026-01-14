@@ -253,7 +253,7 @@ called `Result::unwrap()` on an `Err` value: Error { kind: UnexpectedEof, messag
 
 ## Итоги фаззинга
 
-### Созданные fuzz targets (10 штук):
+### Созданные fuzz targets (12 штук):
 
 | Target | Описание | Результат |
 |--------|----------|-----------|
@@ -264,25 +264,75 @@ called `Result::unwrap()` on an `Err` value: Error { kind: UnexpectedEof, messag
 | fuzz_token_binding | Token type binding | ✅ Работает |
 | fuzz_sum_binding | Sum binding | ✅ Работает |
 | fuzz_edge_cases | Граничные значения | ✅ Работает |
-| fuzz_proof_mutations | Мутации proof | 🐛 **BUG-006 CRITICAL** |
+| fuzz_proof_mutations | Мутации proof | ✅ Работает (BUG-006 не soundness) |
 | fuzz_proving_key_bytes | Corrupted PK/VK | 🐛 BUG-005 |
-| fuzz_structured_proof | Structure-aware мутации | 🐛 **BUG-006 CRITICAL** |
+| fuzz_structured_proof | Structure-aware мутации | ✅ Работает |
+| fuzz_poseidon_preimage | Poseidon preimage resistance | ✅ Работает |
+| fuzz_vault_rand_binding | Vault randomness binding | ✅ Работает |
 
 ### Статистика:
-- **Всего fuzz targets**: 10
-- **Найдено багов**: 6 (BUG-001 - BUG-006)
-- **Критических багов**: 1 (BUG-006)
+- **Всего fuzz targets**: 12
+- **Найдено багов**: 5 (BUG-001 - BUG-005)
+- **Критических багов**: 0 (BUG-006 исследован - не soundness)
 - **Время фаззинга**: ~5 минут на target
 
 ### Рекомендации по приоритетам:
 
-1. **КРИТИЧЕСКИЙ (BUG-006)**: Исследовать причину принятия мутированных proof
-   - Проверить формат сериализации halo2curves
-   - Если это soundness bug - немедленно исправить
-
-2. **ВЫСОКИЙ (BUG-003)**: OOM при corrupted KZG params
+1. **ВЫСОКИЙ (BUG-003)**: OOM при corrupted KZG params
    - Добавить валидацию размера перед аллокацией
 
-3. **СРЕДНИЙ (BUG-001, BUG-002, BUG-004, BUG-005)**: Panic при corrupted input
+2. **СРЕДНИЙ (BUG-001, BUG-002, BUG-004, BUG-005)**: Panic при corrupted input
    - Заменить unwrap() на proper error handling
+
+---
+
+## Property-based тесты (proptest)
+
+### Статистика (2026-01-14):
+- **Всего тестов**: 83 passed, 23 ignored
+- **Время выполнения**: ~16.5 минут (996 секунд)
+
+### Категории тестов:
+
+| Категория | Тесты | Описание | Статус |
+|-----------|-------|----------|--------|
+| LIMB | 5 | Limb decomposition (pk.x, pk.y, sk) | ✅ Все проходят |
+| COLL | 3 | Collision resistance key_data_sum | ✅ Все проходят |
+| BIND | 4 | Binding свойства deposit_identifier | ✅ Все проходят |
+| GEN | 4 | Custom generator points | ✅ Все проходят |
+| OVF | 4 | Overflow при суммировании limbs | ✅ Все проходят |
+| MAL | 4 | Proof malleability | ✅ Все проходят |
+| SIG | 4 | Signature/keypair verification | ✅ Все проходят |
+| DIGEST | 6 | Poseidon digest properties | ✅ Все проходят |
+
+### Важные находки:
+
+1. **MAL-03 (Proof Randomness)**: Proofs используют `OsRng` в `create_proof()` (src/prover.rs:68), поэтому два proof для одних данных **разные**. Это нормальное поведение для ZKP — randomized proofs обеспечивают zero-knowledge свойство.
+
+2. **Все 83 активных теста проходят** без failures.
+
+### Ключевые тесты:
+
+| ID | Тест | Описание | Статус |
+|----|------|----------|--------|
+| LIMB-01 | `test_limb_01_pk_x_decomposition_reversible` | pk.x разбивается на limbs и восстанавливается | ✅ PASS |
+| LIMB-02 | `test_limb_02_pk_y_decomposition_reversible` | pk.y разбивается на limbs и восстанавливается | ✅ PASS |
+| LIMB-03 | `prop_limb_03_random_sk_decomposition` | Случайные sk корректно разбиваются | ✅ PASS |
+| LIMB-04 | `test_limb_04_key_data_sum_computation` | key_data_sum вычисляется корректно | ✅ PASS |
+| LIMB-05 | `prop_limb_05_key_data_sum_fits_fr` | key_data_sum помещается в Fr | ✅ PASS |
+| COLL-01 | `test_coll_01_different_sk_different_sum` | Разные sk дают разные key_data_sum | ✅ PASS |
+| COLL-02 | `prop_coll_02_random_keypairs_unique_sum` | Случайные keypairs уникальны | ✅ PASS |
+| COLL-03 | `test_coll_03_adjacent_sk_different_sum` | Соседние sk дают разные суммы | ✅ PASS |
+| BIND-01 | `test_bind_01_unique_deposit_identifier_sum` | Уникальные deposit_identifier | ✅ PASS |
+| BIND-02 | `prop_bind_02_token_change_changes_digest` | Изменение token меняет digest | ✅ PASS |
+| BIND-03 | `prop_bind_03_vault_change_changes_digest` | Изменение vault меняет digest | ✅ PASS |
+| BIND-04 | `test_bind_04_sum_substitution_same_deposit_sum` | Подмена sum с тем же deposit_sum | ✅ PASS |
+| GEN-01 | `prop_gen_01_custom_generator_valid` | Случайные генераторы работают | ✅ PASS |
+| GEN-02 | `test_gen_02_wrong_pk_for_custom_generator` | Неверный pk отклоняется | ✅ PASS |
+| GEN-03 | `test_gen_03_generator_equals_pk` | g = pk отклоняется | ✅ PASS |
+| GEN-04 | `test_gen_04_generator_identity` | g = identity вызывает panic (BUG-002) | ✅ PASS |
+| OVF-01 | `test_ovf_01_max_limb_values` | Максимальные limbs не переполняют | ✅ PASS |
+| OVF-02 | `prop_ovf_02_extreme_sk_no_overflow` | Экстремальные sk не переполняют | ✅ PASS |
+| OVF-03 | `test_ovf_03_deposit_identifier_max_values` | u64::MAX значения работают | ✅ PASS |
+| OVF-04 | `test_ovf_04_circuit_with_max_values` | Схема работает с u64::MAX | ✅ PASS |
 

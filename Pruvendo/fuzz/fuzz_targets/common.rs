@@ -4,8 +4,9 @@
 
 #![allow(dead_code)]
 
-use gosh_dark_dex_halo2_circuit::circuit::{DarkDexCircuit, poseidon_hash};
-use gosh_dark_dex_halo2_circuit::utils::{consume_uint128_10, consume_uint128_11};
+use gosh_dark_dex_halo2_circuit::circuit::DarkDexCircuit;
+pub use gosh_dark_dex_halo2_circuit::circuit::poseidon_hash;
+pub use gosh_dark_dex_halo2_circuit::utils::{consume_uint128_10, consume_uint128_11};
 use halo2_base::halo2_proofs::{
     dev::MockProver,
     halo2curves::{
@@ -144,6 +145,63 @@ pub fn check_circuit(
         private_note_sum_fr,
         token_type_fr,
         digest,
+    ];
+
+    let prover = MockProver::run(CIRCUIT_K, &circuit, vec![public_inputs]);
+
+    match prover {
+        Ok(prover) => {
+            match prover.verify() {
+                Ok(_) => CircuitResult::Ok,
+                Err(errors) => CircuitResult::Failed(format!("{:?}", errors)),
+            }
+        }
+        Err(e) => CircuitResult::Failed(format!("MockProver::run failed: {:?}", e)),
+    }
+}
+
+/// Проверяет схему с кастомным digest (для тестирования preimage attacks)
+///
+/// circuit_* - значения которые идут в circuit
+/// digest_* - значения для вычисления digest (могут отличаться для теста атаки)
+pub fn check_circuit_with_custom_digest(
+    sk: Fq,
+    pk: Secp256k1Affine,
+    g: Secp256k1Affine,
+    circuit_token: u64,
+    circuit_sum: u64,
+    circuit_vault: u64,
+    sk_raw: u64,
+    digest_token: u64,
+    digest_sum: u64,
+    digest_vault: u64,
+) -> CircuitResult {
+    ensure_working_directory();
+
+    let circuit_token_fr = Fr::from(circuit_token);
+    let circuit_sum_fr = Fr::from(circuit_sum);
+    let circuit_vault_fr = Fr::from(circuit_vault);
+
+    // Вычисляем digest с ДРУГИМИ значениями (для теста атаки)
+    let digest_token_fr = Fr::from(digest_token);
+    let digest_sum_fr = Fr::from(digest_sum);
+    let digest_vault_fr = Fr::from(digest_vault);
+    let digest = compute_digest(sk_raw, &pk, digest_token_fr, digest_sum_fr, digest_vault_fr);
+
+    let circuit = DarkDexCircuit::new(
+        Some(circuit_token_fr),
+        Some(circuit_sum_fr),
+        Some(circuit_vault_fr),
+        Some(sk),
+        Some(pk),
+        Some(g),
+    );
+
+    // Public inputs используют circuit значения для token/sum, но чужой digest
+    let public_inputs = vec![
+        circuit_sum_fr,
+        circuit_token_fr,
+        digest,  // Digest от других значений!
     ];
 
     let prover = MockProver::run(CIRCUIT_K, &circuit, vec![public_inputs]);

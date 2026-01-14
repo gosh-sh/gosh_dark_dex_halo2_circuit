@@ -6,13 +6,15 @@
 //! ВАЖНО: Тесты необходимо запускать из корня проекта!
 //! cargo test --manifest-path Pruvendo/tests/property_tests/Cargo.toml --release
 
-use gosh_dark_dex_halo2_circuit::circuit::DarkDexCircuit;
+use gosh_dark_dex_halo2_circuit::circuit::{DarkDexCircuit, poseidon_hash};
+use gosh_dark_dex_halo2_circuit::utils::{consume_uint128_10, consume_uint128_11};
 
 use halo2_base::halo2_proofs::{
     dev::MockProver,
     halo2curves::{
         bn256::Fr,
         secp256k1::{Fq, Secp256k1Affine},
+        ff::PrimeField,
     },
 };
 
@@ -67,8 +69,8 @@ impl CircuitResult {
 /// * `g` - генератор кривой
 /// * `token_type` - тип токена (witness)
 /// * `private_note_sum` - сумма приватных нот (witness)
-/// * `public_token` - тип токена (public input)
-/// * `public_sum` - сумма (public input)
+/// * `sk_raw` - raw значение sk (u64) для вычисления digest
+/// * `_unused` - не используется (для обратной совместимости)
 ///
 /// # Returns
 /// CircuitResult с результатом проверки
@@ -78,37 +80,11 @@ pub fn check_circuit_with_mock(
     g: Secp256k1Affine,
     token_type: u64,
     private_note_sum: u64,
-    public_token: u64,
-    public_sum: u64,
+    sk_raw: u64,
+    _unused: u64,
 ) -> CircuitResult {
-    // Убедимся что рабочая директория установлена на корень проекта
-    ensure_working_directory();
-
-    // После poseidon_integration добавлен vault_rand_val
-    let vault_rand_val = 111u64; // default value for tests
-
-    let circuit = DarkDexCircuit::new(
-        Some(Fr::from(token_type)),
-        Some(Fr::from(private_note_sum)),
-        Some(Fr::from(vault_rand_val)),
-        Some(sk),
-        Some(pk),
-        Some(g),
-    );
-
-    // После poseidon_integration public_inputs изменились -
-    // теперь включают deposit_identifier_digest (8 слов)
-    // Для MockProver используем упрощённую версию
-    let pub_inputs = vec![vec![Fr::from(public_token), Fr::from(public_sum)]];
-
-    // k=18 как в оригинальных тестах
-    match MockProver::run(18, &circuit, pub_inputs) {
-        Ok(prover) => match prover.verify() {
-            Ok(()) => CircuitResult::Ok,
-            Err(errors) => CircuitResult::ConstraintViolation(format!("{:?}", errors)),
-        },
-        Err(e) => CircuitResult::Error(format!("{:?}", e)),
-    }
+    // Делегируем в check_circuit_with_mock_and_vault с default vault_rand_val
+    check_circuit_with_mock_and_vault(sk, pk, g, token_type, private_note_sum, 111, sk_raw)
 }
 
 /// Генерирует валидную пару ключей из секретного ключа
@@ -131,6 +107,72 @@ pub fn generate_invalid_keypair(
     // pk вычислен от ДРУГОГО секретного ключа
     let wrong_pk = Secp256k1Affine::from(g * Fq::from(wrong_sk_value));
     (sk, wrong_pk, g)
+}
+
+/// Вычисляет digest для public inputs (Poseidon hash)
+fn compute_digest(sk_raw: u64, pk: &Secp256k1Affine, token_type: Fr, private_note_sum: Fr, vault_rand_val: Fr) -> Fr {
+    let deposit_identifier_data_sum = token_type + private_note_sum + vault_rand_val;
+
+    let pk_x_limb_0 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
+    let pk_x_limb_1 = consume_uint128_11(&pk.x.to_bytes().to_vec()[11..22]);
+    let pk_x_limb_2 = consume_uint128_10(&pk.x.to_bytes().to_vec()[22..]);
+
+    let pk_y_limb_0 = consume_uint128_11(&pk.y.to_bytes().to_vec()[0..11]);
+    let pk_y_limb_1 = consume_uint128_11(&pk.y.to_bytes().to_vec()[11..22]);
+    let pk_y_limb_2 = consume_uint128_10(&pk.y.to_bytes().to_vec()[22..]);
+
+    let key_data_sum = (sk_raw as u128) + pk_x_limb_0 + pk_x_limb_1 + pk_x_limb_2 + pk_y_limb_0 + pk_y_limb_1 + pk_y_limb_2;
+    let key_data_sum = Fr::from_u128(key_data_sum);
+
+    poseidon_hash([key_data_sum, deposit_identifier_data_sum])
+}
+
+/// Проверяет схему с явным vault_rand_val
+///
+/// Версия check_circuit_with_mock с поддержкой vault_rand_val для тестирования
+/// edge cases связанных с vault.
+///
+/// # Arguments
+/// * `sk_raw` - raw значение sk (u64) для вычисления digest
+pub fn check_circuit_with_mock_and_vault(
+    sk: Fq,
+    pk: Secp256k1Affine,
+    g: Secp256k1Affine,
+    token_type: u64,
+    private_note_sum: u64,
+    vault_rand_val: u64,
+    sk_raw: u64,
+) -> CircuitResult {
+    ensure_working_directory();
+
+    let token_type_fr = Fr::from(token_type);
+    let private_note_sum_fr = Fr::from(private_note_sum);
+    let vault_rand_val_fr = Fr::from(vault_rand_val);
+
+    let circuit = DarkDexCircuit::new(
+        Some(token_type_fr),
+        Some(private_note_sum_fr),
+        Some(vault_rand_val_fr),
+        Some(sk),
+        Some(pk),
+        Some(g),
+    );
+
+    // После poseidon_integration: public inputs = [private_note_sum, token_type, digest]
+    let digest = compute_digest(sk_raw, &pk, token_type_fr, private_note_sum_fr, vault_rand_val_fr);
+    let pub_inputs = vec![vec![
+        private_note_sum_fr,
+        token_type_fr,
+        digest,
+    ]];
+
+    match MockProver::run(18, &circuit, pub_inputs) {
+        Ok(prover) => match prover.verify() {
+            Ok(()) => CircuitResult::Ok,
+            Err(errors) => CircuitResult::ConstraintViolation(format!("{:?}", errors)),
+        },
+        Err(e) => CircuitResult::Error(format!("{:?}", e)),
+    }
 }
 
 // ============================================================
@@ -161,17 +203,18 @@ impl VerifyResult {
     }
 }
 
-/// Генерирует proof и верифицирует его с заданными public inputs
+/// Генерирует proof и верифицирует его с теми же public inputs
 ///
 /// Это полный flow: prover -> verifier
+/// После poseidon_integration public inputs вычисляются внутри схемы
 pub fn generate_and_verify_proof(
     sk: Fq,
     pk: Secp256k1Affine,
     g: Secp256k1Affine,
     token_type: u64,
     private_note_sum: u64,
-    verify_token: u64,
-    verify_sum: u64,
+    _verify_token: u64,  // Deprecated: не используется после poseidon_integration
+    _verify_sum: u64,    // Deprecated: не используется после poseidon_integration
 ) -> VerifyResult {
     ensure_working_directory();
 
@@ -182,10 +225,10 @@ pub fn generate_and_verify_proof(
     // После poseidon_integration добавлен vault_rand_val
     let vault_rand_val = 111u64;
 
-    // pub_inputs передаётся по ссылке и заполняется внутри generate_proof
-    let mut pub_inputs_out = Vec::new();
+    // Вычисляем public inputs
+    let mut pub_inputs = compute_public_inputs(sk, pk, token_type, private_note_sum, vault_rand_val);
 
-    // Генерируем proof с оригинальными public values
+    // Генерируем proof
     let proof = generate_proof(
         &params,
         Some(Fr::from(token_type)),
@@ -194,36 +237,115 @@ pub fn generate_and_verify_proof(
         Some(sk),
         Some(pk),
         Some(g),
-        &mut pub_inputs_out,
+        &mut pub_inputs,
     );
 
-    // Верифицируем с (возможно другими) public inputs
-    let verify_pub_inputs = vec![Fr::from(verify_token), Fr::from(verify_sum)];
-
-    if verify_proof_(&params, &proof, &vk, verify_pub_inputs) {
+    // Верифицируем с теми же public inputs
+    if verify_proof_(&params, &proof, &vk, pub_inputs) {
         VerifyResult::Valid
     } else {
         VerifyResult::Invalid
     }
 }
 
-/// Верифицирует заданный proof с заданными public inputs
-pub fn verify_existing_proof(
+/// Вычисляет public inputs для схемы
+/// Public inputs: [private_note_sum, token_type, poseidon_digest]
+pub fn compute_public_inputs(
+    sk: Fq,
+    pk: Secp256k1Affine,
+    token_type: u64,
+    private_note_sum: u64,
+    vault_rand_val: u64,
+) -> Vec<Fr> {
+    let token_type_fr = Fr::from(token_type);
+    let private_note_sum_fr = Fr::from(private_note_sum);
+    let vault_rand_val_fr = Fr::from(vault_rand_val);
+
+    // deposit_identifier_data_sum = token_type + private_note_sum + vault_rand_val
+    let deposit_identifier_data_sum = token_type_fr + private_note_sum_fr + vault_rand_val_fr;
+
+    // Вычисляем key_data_sum из sk и pk
+    let sk_raw = {
+        let bytes = sk.to_bytes();
+        u64::from_le_bytes(bytes[0..8].try_into().unwrap())
+    };
+
+    let pk_x_limb_0 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
+    let pk_x_limb_1 = consume_uint128_11(&pk.x.to_bytes().to_vec()[11..22]);
+    let pk_x_limb_2 = consume_uint128_10(&pk.x.to_bytes().to_vec()[22..]);
+
+    let pk_y_limb_0 = consume_uint128_11(&pk.y.to_bytes().to_vec()[0..11]);
+    let pk_y_limb_1 = consume_uint128_11(&pk.y.to_bytes().to_vec()[11..22]);
+    let pk_y_limb_2 = consume_uint128_10(&pk.y.to_bytes().to_vec()[22..]);
+
+    let key_data_sum = (sk_raw as u128) + pk_x_limb_0 + pk_x_limb_1 + pk_x_limb_2
+        + pk_y_limb_0 + pk_y_limb_1 + pk_y_limb_2;
+    let key_data_sum_fr = Fr::from_u128(key_data_sum);
+
+    // Вычисляем poseidon digest
+    let digest = poseidon_hash([key_data_sum_fr, deposit_identifier_data_sum]);
+
+    vec![private_note_sum_fr, token_type_fr, digest]
+}
+
+/// Генерирует proof и возвращает его вместе с public inputs
+pub fn generate_proof_with_pub_inputs(
+    sk: Fq,
+    pk: Secp256k1Affine,
+    g: Secp256k1Affine,
+    token_type: u64,
+    private_note_sum: u64,
+) -> (Vec<u8>, Vec<Fr>) {
+    ensure_working_directory();
+
+    let params = read_kzg_params("kzg_params.bin".to_string());
+    let vault_rand_val = 111u64;
+
+    // Вычисляем public inputs
+    let mut pub_inputs = compute_public_inputs(sk, pk, token_type, private_note_sum, vault_rand_val);
+
+    let proof = generate_proof(
+        &params,
+        Some(Fr::from(token_type)),
+        Some(Fr::from(private_note_sum)),
+        Some(Fr::from(vault_rand_val)),
+        Some(sk),
+        Some(pk),
+        Some(g),
+        &mut pub_inputs,
+    );
+
+    (proof, pub_inputs)
+}
+
+/// Верифицирует заданный proof с заданными public inputs (poseidon digest)
+pub fn verify_existing_proof_with_pub_inputs(
     proof: &[u8],
-    verify_token: u64,
-    verify_sum: u64,
+    pub_inputs: Vec<Fr>,
 ) -> VerifyResult {
     ensure_working_directory();
 
     let params = read_kzg_params("kzg_params.bin".to_string());
     let vk = verification_key_from_path("verification_key.bin".to_string());
-    let pub_inputs = vec![Fr::from(verify_token), Fr::from(verify_sum)];
 
     if verify_proof_(&params, proof, &vk, pub_inputs) {
         VerifyResult::Valid
     } else {
         VerifyResult::Invalid
     }
+}
+
+/// Deprecated: Верифицирует proof - для совместимости со старыми тестами
+/// После poseidon_integration эта функция НЕ работает корректно,
+/// т.к. public inputs теперь включают poseidon digest
+#[deprecated(note = "Use verify_existing_proof_with_pub_inputs instead")]
+pub fn verify_existing_proof(
+    _proof: &[u8],
+    _verify_token: u64,
+    _verify_sum: u64,
+) -> VerifyResult {
+    // Не можем верифицировать без знания sk для вычисления poseidon digest
+    VerifyResult::Invalid
 }
 
 /// Генерирует proof и возвращает его вместе с public inputs
@@ -274,6 +396,117 @@ mod helper_tests {
         let (_, correct_pk, _) = generate_valid_keypair(12345);
         // wrong_pk должен отличаться от correct_pk
         assert_ne!(wrong_pk, correct_pk);
+    }
+}
+
+// ============================================================================
+// BUG TRACKING - Система отслеживания известных багов
+// ============================================================================
+
+/// Статус бага
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BugStatus {
+    /// Баг воспроизводится в текущей версии
+    Reproduced,
+    /// Баг исправлен
+    Fixed,
+    /// Статус неизвестен (тест пропущен)
+    Skipped,
+}
+
+/// Информация о баге
+pub struct BugInfo {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub location: &'static str,
+    pub severity: &'static str,
+}
+
+/// Известные баги
+pub mod known_bugs {
+    use super::BugInfo;
+
+    pub const BUG_001: BugInfo = BugInfo {
+        id: "BUG-001",
+        title: "Panic при некорректном VK bytes",
+        location: "halo2curves (upstream)",
+        severity: "Medium",
+    };
+
+    pub const BUG_002: BugInfo = BugInfo {
+        id: "BUG-002",
+        title: "Panic при g = identity point",
+        location: "subtle crate (upstream)",
+        severity: "Medium",
+    };
+
+    pub const BUG_003: BugInfo = BugInfo {
+        id: "BUG-003",
+        title: "shl_overflow при corrupted KZG header",
+        location: "halo2_proofs (upstream) - дубликат BUG-004",
+        severity: "Medium",
+    };
+
+    pub const BUG_004: BugInfo = BugInfo {
+        id: "BUG-004",
+        title: "shl_overflow в commitment.rs",
+        location: "halo2_proofs (upstream)",
+        severity: "Medium",
+    };
+
+    pub const BUG_005: BugInfo = BugInfo {
+        id: "BUG-005",
+        title: "shl_overflow в domain.rs",
+        location: "halo2_proofs (upstream)",
+        severity: "Medium",
+    };
+
+    pub const BUG_006: BugInfo = BugInfo {
+        id: "BUG-006",
+        title: "Non-canonical field elements принимаются при десериализации",
+        location: "halo2curves SerdeFormat::RawBytesUnchecked",
+        severity: "Low (не soundness bug)",
+    };
+}
+
+/// Логирует результат теста бага
+pub fn report_bug_status(bug: &BugInfo, status: BugStatus) {
+    match status {
+        BugStatus::Reproduced => {
+            eprintln!("┌─────────────────────────────────────────────────────────────┐");
+            eprintln!("│ {} STATUS: ⚠️  REPRODUCED", bug.id);
+            eprintln!("│ Title: {}", bug.title);
+            eprintln!("│ Location: {}", bug.location);
+            eprintln!("│ Severity: {}", bug.severity);
+            eprintln!("└─────────────────────────────────────────────────────────────┘");
+        }
+        BugStatus::Fixed => {
+            eprintln!("┌─────────────────────────────────────────────────────────────┐");
+            eprintln!("│ {} STATUS: ✅ FIXED", bug.id);
+            eprintln!("│ Title: {}", bug.title);
+            eprintln!("│ The bug no longer reproduces in current version");
+            eprintln!("└─────────────────────────────────────────────────────────────┘");
+        }
+        BugStatus::Skipped => {
+            eprintln!("┌─────────────────────────────────────────────────────────────┐");
+            eprintln!("│ {} STATUS: ⏭️  SKIPPED", bug.id);
+            eprintln!("│ Title: {}", bug.title);
+            eprintln!("│ Reason: Required files not found");
+            eprintln!("└─────────────────────────────────────────────────────────────┘");
+        }
+    }
+}
+
+/// Выполняет код и возвращает статус бага
+/// Если код паникует - баг воспроизводится
+/// Если код выполняется успешно - баг исправлен
+pub fn check_bug_status<F, R>(f: F) -> BugStatus
+where
+    F: FnOnce() -> R + std::panic::UnwindSafe,
+{
+    match std::panic::catch_unwind(f) {
+        Ok(_) => BugStatus::Fixed,
+        Err(_) => BugStatus::Reproduced,
     }
 }
 

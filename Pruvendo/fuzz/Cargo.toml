@@ -12,9 +12,8 @@ libfuzzer-sys = "0.4"
 arbitrary = { version = "1", features = ["derive"] }
 
 # Основной проект (уже содержит все нужные зависимости)
-# Путь через симлинк fuzz -> Pruvendo/fuzz: fuzz/.. = корень проекта
-# Cargo использует логический путь (через симлинк), не физический
-gosh_dark_dex_halo2_circuit = { path = ".." }
+# Путь от Pruvendo/fuzz к корню проекта: ../..
+gosh_dark_dex_halo2_circuit = { path = "../.." }
 
 # Используем те же версии что и основной проект
 halo2_proofs = { git = "https://github.com/scroll-tech/halo2.git", branch = "v1.1" }
@@ -106,6 +105,111 @@ bench = false
 [[bin]]
 name = "fuzz_structured_proof"
 path = "fuzz_targets/fuzz_structured_proof.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_poseidon_preimage"
+path = "fuzz_targets/fuzz_poseidon_preimage.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_vault_rand_binding"
+path = "fuzz_targets/fuzz_vault_rand_binding.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_poseidon_consistency"
+path = "fuzz_targets/fuzz_poseidon_consistency.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ec_invalid_points"
+path = "fuzz_targets/fuzz_ec_invalid_points.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ec_coordinate_manipulation"
+path = "fuzz_targets/fuzz_ec_coordinate_manipulation.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_digest_collision"
+path = "fuzz_targets/fuzz_digest_collision.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_vault_zero_binding"
+path = "fuzz_targets/fuzz_vault_zero_binding.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_limb_overflow"
+path = "fuzz_targets/fuzz_limb_overflow.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_proof_replay"
+path = "fuzz_targets/fuzz_proof_replay.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_key_sum_collision"
+path = "fuzz_targets/fuzz_key_sum_collision.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_deposit_sum_collision"
+path = "fuzz_targets/fuzz_deposit_sum_collision.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_negated_y"
+path = "fuzz_targets/fuzz_negated_y.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_multikey_digest"
+path = "fuzz_targets/fuzz_multikey_digest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_field_wrap"
+path = "fuzz_targets/fuzz_field_wrap.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_witness_manipulation"
+path = "fuzz_targets/fuzz_witness_manipulation.rs"
 test = false
 doc = false
 bench = false
