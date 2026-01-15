@@ -15,3 +15,6 @@ mod tests;
 #[cfg(test)]
 mod poseidon_audit;
 
+#[cfg(test)]
+mod fpchip_audit;
+

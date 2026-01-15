@@ -294,3 +294,17 @@ path = "fuzz_targets/fuzz_poseidon_gadget_consistency.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_scalar_multiply_verification"
+path = "fuzz_targets/fuzz_scalar_multiply_verification.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_limb_overflow_attack"
+path = "fuzz_targets/fuzz_limb_overflow_attack.rs"
+test = false
+doc = false
+bench = false
