@@ -87,8 +87,8 @@ fn mutate_proof(proof: &[u8], mutation: &MutationType) -> Vec<u8> {
             }
         }
         MutationType::ZeroRange { start, len } => {
-            let end = (*start + *len).min(mutated.len());
             if *start < mutated.len() {
+                let end = start.saturating_add(*len).min(mutated.len());
                 for i in *start..end {
                     mutated[i] = 0;
                 }
