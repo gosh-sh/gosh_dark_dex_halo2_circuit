@@ -110,7 +110,7 @@ pub fn generate_invalid_keypair(
 }
 
 /// Вычисляет digest для public inputs (Poseidon hash)
-fn compute_digest(sk_raw: u64, pk: &Secp256k1Affine, token_type: Fr, private_note_sum: Fr, vault_rand_val: Fr) -> Fr {
+pub fn compute_digest(sk_raw: u64, pk: &Secp256k1Affine, token_type: Fr, private_note_sum: Fr, vault_rand_val: Fr) -> Fr {
     let deposit_identifier_data_sum = token_type + private_note_sum + vault_rand_val;
 
     let pk_x_limb_0 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
