@@ -1,26 +1,32 @@
 #!/bin/bash
 #
-# Overnight Fuzzing Script
-# Запускает все fuzz targets последовательно
-# 
+# Overnight Fuzzing Script - STABLE TARGETS (v1 - original)
+# Запускает проверенные стабильные fuzz targets
+#
 # Использование:
 #   ./Pruvendo/fuzz/run_overnight.sh [time_per_target_seconds]
 #
 # По умолчанию: 300 секунд (5 минут) на каждый target
 # Для ночного запуска рекомендуется: ./run_overnight.sh 3600 (1 час на target)
+#
+# ВНИМАНИЕ: Исключены 4 targets, которые упали в первом ночном прогоне:
+#   - fuzz_multikey_digest (crash - BC-007 deposit_sum collision)
+#   - fuzz_digest_collision (crash - BC-007 deposit_sum collision)
+#   - fuzz_proving_key_bytes (crash - BC-005 upstream halo2_proofs panic)
+#   - fuzz_verifier_bytes (crash - BC-001 upstream halo2curves panic)
+# Эти targets находятся в run_overnight_v2.sh для повторного тестирования.
 
 set -e
 
 TIME_PER_TARGET=${1:-300}  # 5 минут по умолчанию
 
 # Лёгкие targets (без полного circuit, быстрые)
+# ИСКЛЮЧЕНЫ: fuzz_multikey_digest, fuzz_digest_collision
 FAST_TARGETS=(
     "fuzz_key_sum_collision"
     "fuzz_deposit_sum_collision"
     "fuzz_field_wrap"
-    "fuzz_multikey_digest"
     "fuzz_poseidon_consistency"
-    "fuzz_digest_collision"
     "fuzz_limb_overflow"
 )
 
@@ -42,12 +48,11 @@ MEDIUM_TARGETS=(
 )
 
 # Тяжёлые targets (полный prover/verifier)
+# ИСКЛЮЧЕНЫ: fuzz_proving_key_bytes, fuzz_verifier_bytes
 HEAVY_TARGETS=(
     "fuzz_proof_mutations"
     "fuzz_structured_proof"
     "fuzz_proof_replay"
-    "fuzz_proving_key_bytes"
-    "fuzz_verifier_bytes"
     "fuzz_ec_invalid_points"
 )
 
