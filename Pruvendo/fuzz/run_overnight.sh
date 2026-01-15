@@ -48,12 +48,10 @@ MEDIUM_TARGETS=(
 )
 
 # Тяжёлые targets (полный prover/verifier)
-# ИСКЛЮЧЕНЫ: fuzz_proving_key_bytes, fuzz_verifier_bytes (known crashes: BC-001, BC-005)
-# fuzz_proof_mutations, fuzz_structured_proof - transient crashes были очищены,
-# targets работают стабильно
+# ИСКЛЮЧЕНЫ:
+#   - fuzz_proving_key_bytes, fuzz_verifier_bytes (known crashes: BC-001, BC-005)
+#   - fuzz_proof_mutations, fuzz_structured_proof (transient crashes - в v2 для проверки)
 HEAVY_TARGETS=(
-    "fuzz_proof_mutations"
-    "fuzz_structured_proof"
     "fuzz_proof_replay"
     "fuzz_ec_invalid_points"
 )

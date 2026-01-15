@@ -1,15 +1,13 @@
 #!/bin/bash
-# Overnight Fuzzing Script v2 - NEW targets only
+# Overnight Fuzzing Script v2 - NEW + TRANSIENT targets
 # Created: 2026-01-15
 # Updated: 2026-01-16
 #
 # This script includes:
 # - 16 NEW targets (added after first overnight run)
+# - 2 TRANSIENT targets (crashed in v1, need long-run verification)
 #
-# NOTE:
-# - Known crashing targets (BC-001, BC-005, BC-007) in run_overnight_known_crashes.sh
-# - Transient targets (fuzz_proof_mutations, fuzz_structured_proof) moved back to
-#   run_overnight.sh after crash files were cleaned
+# NOTE: Known crashing targets (BC-001, BC-005, BC-007) in run_overnight_known_crashes.sh
 
 set -e
 
@@ -17,6 +15,16 @@ set -e
 FUZZ_TIME=${1:-600}  # Default: 10 minutes per target
 FUZZ_DIR="Pruvendo/fuzz"
 LOG_FILE="fuzz_overnight_v2_$(date +%Y%m%d_%H%M%S).log"
+
+# ============================================
+# TRANSIENT targets - crashed in v1 overnight, need long-run verification
+# ============================================
+# Crash files don't reproduce on short runs, but crashed during 5-hour overnight.
+# Possible causes: OOM, timeout, race condition. Need to verify on long runs.
+TRANSIENT_TARGETS=(
+    "fuzz_proof_mutations"
+    "fuzz_structured_proof"
+)
 
 # ============================================
 # NEW targets (16 total) - not run in v1
@@ -47,10 +55,11 @@ NEW_TARGETS=(
     "fuzz_range_check_bypass"
 )
 
-# All targets (16 total)
-TARGETS=("${NEW_TARGETS[@]}")
+# Combine all targets (18 total: 2 transient + 16 new)
+TARGETS=("${TRANSIENT_TARGETS[@]}" "${NEW_TARGETS[@]}")
 
-echo "=== Overnight Fuzzing v2: NEW Targets ===" | tee "$LOG_FILE"
+echo "=== Overnight Fuzzing v2: NEW + TRANSIENT Targets ===" | tee "$LOG_FILE"
+echo "TRANSIENT targets (2): ${TRANSIENT_TARGETS[*]}" | tee -a "$LOG_FILE"
 echo "NEW targets (16): see log for details" | tee -a "$LOG_FILE"
 echo "Started: $(date)" | tee -a "$LOG_FILE"
 echo "Time per target: ${FUZZ_TIME}s" | tee -a "$LOG_FILE"
