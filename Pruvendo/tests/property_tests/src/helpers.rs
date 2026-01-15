@@ -480,7 +480,7 @@ pub mod known_bugs {
         id: "BC-007",
         title: "deposit_sum коллизии из-за аддитивной формулы",
         location: "circuit.rs deposit_sum = token + sum + vault",
-        severity: "High",
+        severity: "Low (not exploitable - token and sum are public inputs)",
     };
 
     // Backwards compatibility aliases

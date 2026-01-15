@@ -26,7 +26,7 @@ cargo test bc006 --release -- --ignored --nocapture  # BC-006
 | BC-004 | shl_overflow в commitment.rs | Medium | ✅ NOT CONFIRMED |
 | BC-005 | shl_overflow в domain.rs | Medium | Дубликат BC-004 |
 | BC-006 | Non-canonical field elements | Low | ✅ Not a soundness issue |
-| **BC-007** | **deposit_sum коллизии** | **High** | **🔴 FOUND BY FUZZING** |
+| BC-007 | deposit_sum коллизии | Low | ✅ Not exploitable |
 
 ## Детали каждого Bug Candidate
 
@@ -60,7 +60,7 @@ cargo test bc006 --release -- --ignored --nocapture  # BC-006
 - **Статус:** NOT a soundness issue - elements are reduced during arithmetic
 - **Рекомендация:** Low priority, informational
 
-### BC-007: deposit_sum collision (HIGH SEVERITY)
+### BC-007: deposit_sum collision (LOW - NOT EXPLOITABLE)
 - **Найден:** Overnight fuzzing 15.01.2026
 - **Fuzz targets:** `fuzz_digest_collision`, `fuzz_multikey_digest`
 - **Воспроизведение:**
@@ -72,17 +72,15 @@ cargo test bc006 --release -- --ignored --nocapture  # BC-006
   - `deposit_sum = token + sum + vault` (additive formula)
   - Different `(token, vault)` pairs with the same sum produce identical `deposit_sum`
   - Example: `(token=91577, vault=691321)` and `(token=93113, vault=689785)` produce same digest
-- **Влияние на безопасность:**
-  - Attacker can create different notes with identical digest
-  - Public data (token, sum) not separated from private (vault)
-- **Рекомендация:** Change formula:
+- **Почему НЕ эксплуатируется:**
+  - `token_type` и `private_note_sum` являются **PUBLIC INPUTS** (проверяются verifier'ом)
+  - Схема проверяет: `public_inputs = [private_note_sum, token_type, digest]`
+  - Если атакующий изменит token или sum, verifier это увидит
+  - Единственный приватный компонент (`vault_rand_val`) не даёт атакующему преимущества
+- **Статус:** ✅ Informational - не является soundness уязвимостью
+- **Рекомендация (defense in depth):** Для большей прозрачности можно изменить формулу:
   ```
-  digest = poseidon_hash([key_sum, token, sum, vault])  // separately
-  ```
-  instead of:
-  ```
-  deposit_sum = token + sum + vault
-  digest = poseidon_hash([key_sum, deposit_sum])
+  digest = poseidon_hash([key_sum, token, sum, vault])  // hash separately
   ```
 
 ## Tracking System

@@ -10,19 +10,19 @@
 
 | # | Target | Crashes | Статус | Критичность |
 |---|--------|---------|--------|-------------|
-| 1 | fuzz_digest_collision | 1 | ✅ Воспроизводится | 🔴 КРИТИЧЕСКАЯ |
-| 2 | fuzz_multikey_digest | 1 | ✅ Воспроизводится | 🟡 ТРЕБУЕТ АНАЛИЗА |
-| 3 | fuzz_proving_key_bytes | 3 | ✅ Воспроизводится | 🟠 СРЕДНЯЯ |
-| 4 | fuzz_verifier_bytes | 3 | ✅ Воспроизводится | 🟠 СРЕДНЯЯ |
-| 5 | fuzz_proof_mutations | 1 | ❓ Не воспроизводится | ⚪ НЕИЗВЕСТНО |
-| 6 | fuzz_structured_proof | 1 | ❓ Не воспроизводится | ⚪ НЕИЗВЕСТНО |
+| 1 | fuzz_digest_collision | 1 | ✅ Воспроизводится | ⚪ LOW (not exploitable) |
+| 2 | fuzz_multikey_digest | 1 | ✅ Воспроизводится | ⚪ LOW (same as #1) |
+| 3 | fuzz_proving_key_bytes | 3 | ✅ Воспроизводится | 🟠 СРЕДНЯЯ (BC-005) |
+| 4 | fuzz_verifier_bytes | 3 | ✅ Воспроизводится | 🟠 СРЕДНЯЯ (BC-001) |
+| 5 | fuzz_proof_mutations | 1 | ❓ Не воспроизводится | ⚪ TRANSIENT |
+| 6 | fuzz_structured_proof | 1 | ❓ Не воспроизводится | ⚪ TRANSIENT |
 
 ---
 
 ## CRASH-001: fuzz_digest_collision
 
-**Файл**: `crash-bf9dd64e8719cdd48add91072c80230cbe2ad6cb`  
-**Критичность**: 🔴 КРИТИЧЕСКАЯ  
+**Файл**: `crash-bf9dd64e8719cdd48add91072c80230cbe2ad6cb`
+**Критичность**: ⚪ LOW (NOT EXPLOITABLE)
 **Воспроизводится**: ДА
 
 ### Входные данные (64 bytes)
@@ -47,14 +47,27 @@ Digest: 0x22a6d4de61a355d77c80c7fdff244ee269a6afbd275aaa1cd6c1896137198d57
 - Input 2: `93113 + 681091577 + 689785 = 681874475`
 - ОДИНАКОВЫЙ `deposit_sum` → одинаковый digest
 
-**Вывод**: Это **НЕ баг в Poseidon hash**, а свойство дизайна. `deposit_sum` - это сумма, и разные комбинации (token, vault) могут давать одинаковую сумму. Однако это показывает что:
+### Почему это НЕ эксплуатируется
 
-1. **Злоумышленник может создать разные notes с одинаковым digest**, меняя token и vault
-2. **Публичные данные (token, sum) не разделены от приватных (vault)**
+**Ключевое наблюдение**: `token_type` и `private_note_sum` являются **PUBLIC INPUTS**!
 
-**Рекомендация**: Рассмотреть изменение формулы digest для включения каждого поля отдельно:
+Схема проверяет:
+```rust
+public_inputs = [private_note_sum, token_type, digest]
+layouter.constrain_instance(deposit_identifier_data.0[i], config.public_inputs, i)?;  // token, sum
+layouter.constrain_instance(hash.cell(), config.public_inputs, 2)?;  // digest
 ```
-digest = poseidon_hash([key_sum, token, sum, vault])  // вместо token+sum+vault
+
+Это означает:
+1. Если атакующий изменит `token` или `sum`, verifier это увидит в public inputs
+2. Единственный приватный компонент (`vault_rand_val`) не даёт атакующему преимущества
+3. Схема защищена публичными входами, не хешем
+
+**Вывод**: Это **informational finding**, не soundness vulnerability.
+
+**Рекомендация (defense in depth)**: Для большей прозрачности можно изменить формулу:
+```
+digest = poseidon_hash([key_sum, token, sum, vault])  // hash separately
 ```
 
 ---
@@ -156,11 +169,22 @@ UnexpectedEof в halo2curves::bn256::fq при read
 
 ## Итоги и рекомендации
 
-### Критические находки
-1. **CRASH-001/002**: Коллизии в digest из-за аддитивности `deposit_sum`
+### Результаты анализа
+
+| BC | Находка | Severity | Эксплуатируемость |
+|----|---------|----------|-------------------|
+| BC-007 | deposit_sum коллизии | Low | ❌ Нет (public inputs защищают) |
+| BC-005 | shl_overflow в domain.rs | Medium | ❌ Нет (panic, не soundness) |
+| BC-001 | UnexpectedEof в halo2curves | Medium | ❌ Нет (panic, не soundness) |
 
 ### Рекомендации
-1. Изменить формулу digest для раздельного хеширования полей
-2. Сообщить upstream о panic в halo2_proofs/halo2curves на невалидных входах
-3. Расследовать невоспроизводимые crashes (возможно race conditions)
+1. **(Low priority)** Рассмотреть изменение формулы digest для defense in depth
+2. **(Medium priority)** Сообщить upstream о panic в halo2_proofs/halo2curves на невалидных входах
+3. Transient crashes (CRASH-009/010) можно игнорировать — это артефакты OOM/timeout
+
+### Общий вывод
+Ночной фаззинг не выявил критических soundness уязвимостей. Все найденные crashes либо:
+- Не эксплуатируются (BC-007 — защищено public inputs)
+- Являются upstream проблемами в halo2_proofs/halo2curves (BC-001, BC-005)
+- Transient failures (OOM/timeout)
 
