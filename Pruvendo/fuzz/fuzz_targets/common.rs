@@ -92,7 +92,7 @@ impl CircuitResult {
 }
 
 /// Вычисляет digest для public inputs (Poseidon hash)
-fn compute_digest(sk_raw: u64, pk: &Secp256k1Affine, token_type: Fr, private_note_sum: Fr, vault_rand_val: Fr) -> Fr {
+pub fn compute_digest(sk_raw: u64, pk: &Secp256k1Affine, token_type: Fr, private_note_sum: Fr, vault_rand_val: Fr) -> Fr {
     let deposit_identifier_data_sum = token_type + private_note_sum + vault_rand_val;
 
     let pk_x_limb_0 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
@@ -158,6 +158,67 @@ pub fn check_circuit(
         }
         Err(e) => CircuitResult::Failed(format!("MockProver::run failed: {:?}", e)),
     }
+}
+
+/// Проверяет схему с Fr значениями (упрощённая версия)
+///
+/// Принимает Fr напрямую вместо u64
+pub fn check_circuit_fr(
+    sk: Fq,
+    pk: Secp256k1Affine,
+    g: Secp256k1Affine,
+    token_type: Fr,
+    private_note_sum: Fr,
+    vault_rand_val: Fr,
+) -> CircuitResult {
+    ensure_working_directory();
+
+    // Для compute_digest нужен sk_raw, извлекаем из Fq
+    // Это упрощение - берём младшие 64 бита
+    let sk_bytes = sk.to_repr();
+    let sk_raw = u64::from_le_bytes(sk_bytes[0..8].try_into().unwrap());
+
+    let digest = compute_digest(sk_raw, &pk, token_type, private_note_sum, vault_rand_val);
+
+    let circuit = DarkDexCircuit::new(
+        Some(token_type),
+        Some(private_note_sum),
+        Some(vault_rand_val),
+        Some(sk),
+        Some(pk),
+        Some(g),
+    );
+
+    let public_inputs = vec![
+        private_note_sum,
+        token_type,
+        digest,
+    ];
+
+    let prover = MockProver::run(CIRCUIT_K, &circuit, vec![public_inputs]);
+
+    match prover {
+        Ok(prover) => {
+            match prover.verify() {
+                Ok(_) => CircuitResult::Ok,
+                Err(errors) => CircuitResult::Failed(format!("{:?}", errors)),
+            }
+        }
+        Err(e) => CircuitResult::Failed(format!("MockProver::run failed: {:?}", e)),
+    }
+}
+
+/// Вычисляет digest с Fr значениями
+pub fn compute_digest_fr(
+    sk: Fq,
+    pk: &Secp256k1Affine,
+    token_type: Fr,
+    private_note_sum: Fr,
+    vault_rand_val: Fr,
+) -> Fr {
+    let sk_bytes = sk.to_repr();
+    let sk_raw = u64::from_le_bytes(sk_bytes[0..8].try_into().unwrap());
+    compute_digest(sk_raw, pk, token_type, private_note_sum, vault_rand_val)
 }
 
 /// Проверяет схему с кастомным digest (для тестирования preimage attacks)

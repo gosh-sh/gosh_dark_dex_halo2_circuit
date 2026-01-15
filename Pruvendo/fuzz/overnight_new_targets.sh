@@ -1,23 +1,30 @@
 #!/bin/bash
-# Overnight fuzzing script for NEW targets only (2026-01-15)
-# Запускает только 6 новых глубоких targets, не повторяя вчерашние 26
+# Overnight fuzzing script for NEW targets only (2026-01-15 evening)
+# Запускает 10 новых targets, не повторяя старые 26
 
 set -e
 
 # Конфигурация
-FUZZ_TIME=800           # секунд на каждый target (~13 минут)
+FUZZ_TIME=600           # секунд на каждый target (~10 минут)
 FUZZ_DIR="Pruvendo/fuzz"
 LOG_FILE="Pruvendo/fuzz/overnight_results_$(date +%Y%m%d_%H%M%S).log"
 PARALLEL_JOBS=2         # Параллельные jobs (осторожно с памятью)
 
 # Только НОВЫЕ targets (не запускались вчера ночью)
 NEW_TARGETS=(
+    # Batch 1: Глубокие криптографические атаки (созданы утром)
     "fuzz_constraint_bypass"      # pk ≠ sk*g bypass атаки
-    "fuzz_public_input_mismatch"  # Манипуляция public inputs  
+    "fuzz_public_input_mismatch"  # Манипуляция public inputs
     "fuzz_weak_generator"         # Слабые generators
     "fuzz_digest_preimage"        # Poseidon collision
     "fuzz_cross_keypair_attack"   # Cross-keypair атаки
     "fuzz_limb_reconstruction"    # key_data_sum collision
+
+    # Batch 2: Дополнительные targets (созданы вечером)
+    "fuzz_scalar_edge_cases"      # Edge cases для sk (0, 1, order-1, etc)
+    "fuzz_double_spend_attack"    # Double-spend атаки через proof reuse
+    "fuzz_range_check_bypass"     # Range check bypass в limbs
+    "fuzz_poseidon_algebraic"     # Алгебраические атаки на Poseidon
 )
 
 echo "=== Overnight Fuzzing (NEW TARGETS ONLY) ===" | tee $LOG_FILE

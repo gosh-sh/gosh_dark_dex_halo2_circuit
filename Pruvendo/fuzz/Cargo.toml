@@ -257,3 +257,33 @@ path = "fuzz_targets/fuzz_limb_reconstruction.rs"
 test = false
 doc = false
 bench = false
+
+# === NEW FUZZ TARGETS (2026-01-15 evening) ===
+
+[[bin]]
+name = "fuzz_scalar_edge_cases"
+path = "fuzz_targets/fuzz_scalar_edge_cases.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_double_spend_attack"
+path = "fuzz_targets/fuzz_double_spend_attack.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_range_check_bypass"
+path = "fuzz_targets/fuzz_range_check_bypass.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_poseidon_algebraic"
+path = "fuzz_targets/fuzz_poseidon_algebraic.rs"
+test = false
+doc = false
+bench = false
