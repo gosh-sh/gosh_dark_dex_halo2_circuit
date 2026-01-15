@@ -45,15 +45,15 @@ pub fn read_kzg_params(path: String) -> ParamsKZG<Bn256>{
     params
 }
 
-pub fn generate_proof_key(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, vault_rand_val: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>) -> Result<ProvingKey<G1Affine>, Error>{
-    let circuit: DarkDexCircuit = DarkDexCircuit::new(token_type, private_note_sum, vault_rand_val, sk, pk, g);
+pub fn generate_proof_key(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>,  sk_u: Option<Fr>, sk_u_commitment: Option<Fr>) -> Result<ProvingKey<G1Affine>, Error>{
+    let circuit: DarkDexCircuit = DarkDexCircuit::new(token_type, private_note_sum, sk_u, sk_u_commitment);
     let vk = keygen_vk(params, &circuit).unwrap();
     keygen_pk(params, vk, &circuit)
 }
 
 
-pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, vault_rand_val: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>, pub_inputs: &mut Vec<Fr>) -> Vec<u8>{
-    let circuit: DarkDexCircuit = DarkDexCircuit::new( token_type, private_note_sum, vault_rand_val, sk, pk, g);
+pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>,  sk_u: Option<Fr>, sk_u_commitment: Option<Fr>,  pub_inputs: &mut Vec<Fr>) -> Vec<u8>{
+    let circuit: DarkDexCircuit = DarkDexCircuit::new( token_type, private_note_sum, sk_u, sk_u_commitment);
 
     let now = Instant::now();
     let vk = keygen_vk(params, &circuit).unwrap();
@@ -72,24 +72,6 @@ pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private
     let proof: Vec<u8> = transcript.finalize();
     let end  = now.elapsed().as_millis();
     println!("proof generation time: {:?}", end);
-
-    /*let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
-    let strategy = SingleStrategy::new(&params);
-
-
-   let circuit_: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::default();
-    let vk_from_empty = keygen_vk(params, &circuit_).unwrap();
-
-    assert!(verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<_>, _, _, _>(
-        &params,
-        &vk_from_empty,
-        strategy,
-        &[&[&pub_inputs]],
-        //&[&[]],
-        &mut transcript,
-    )
-    .is_ok());*/
-
 
     proof
 }

@@ -49,43 +49,32 @@ use halo2_ecc::fields::PrimeField as OtherPrimeField;
 
 #[test]
 fn kzg_test_() {
-    let sk_raw = random::<u64>();
+    let sk_u_raw = random::<u64>();
     let token_type_raw = 1u64;
     let private_note_sum_raw = 1000u64;
     let vault_rand_val_raw = 111u64;
 
-    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
-    let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
-    let g = Secp256k1Affine::generator();
-    
+    println!("sk_u_raw = {:#x}", sk_u_raw);
+
+    let sk_u = Fr::from(sk_u_raw);
     let token_type = Fr::from(token_type_raw);
     let private_note_sum = Fr::from(private_note_sum_raw);
-    let vault_rand_val = Fr::from(vault_rand_val_raw);
 
-    let deposit_identifier_data_sum  = token_type + private_note_sum + vault_rand_val;
+    let sk_u_commitment = poseidon_hash([sk_u, Fr::zero()]);
 
-    let pk_x_limb_0 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
-    let pk_x_limb_1 = consume_uint128_11(&pk.x.to_bytes().to_vec()[11..22]);
-    let pk_x_limb_2 = consume_uint128_10(&pk.x.to_bytes().to_vec()[22..]);
+    let data_to_hash = [sk_u_commitment, private_note_sum, token_type,  sk_u];
 
-    let pk_y_limb_0 = consume_uint128_11(&pk.y.to_bytes().to_vec()[0..11]);
-    let pk_y_limb_1 = consume_uint128_11(&pk.y.to_bytes().to_vec()[11..22]);
-    let pk_y_limb_2 = consume_uint128_10(&pk.y.to_bytes().to_vec()[22..]);
-
-
-    let key_data_sum = (sk_raw as u128) + pk_x_limb_0 + pk_x_limb_1 + pk_x_limb_2 + pk_y_limb_0 + pk_y_limb_1 + pk_y_limb_2;
-
-    let key_data_sum = Fr::from_u128(key_data_sum);
-
-    let digest = poseidon_hash([key_data_sum, deposit_identifier_data_sum]);
-
+    let digest = poseidon_hash(data_to_hash);
 
     let mut pub_inputs = vec![private_note_sum, token_type, digest];
 
     //////
 
-    let params: ParamsKZG<Bn256> = setup(18);
-    let circuit: DarkDexCircuit = DarkDexCircuit::new(Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g));
+    let params: ParamsKZG<Bn256> = setup(8);
+    let circuit: DarkDexCircuit = DarkDexCircuit::new(Some(token_type), Some(private_note_sum),  Some(sk_u), Some(sk_u_commitment));
+
+    //let prover = MockProver::run(8, &circuit, vec![pub_inputs.clone()]).unwrap();
+    //assert_eq!(prover.verify(), Ok(()));
     
     let vk = keygen_vk(&params, &circuit).unwrap();
     let pk = keygen_pk(&params, vk, &circuit).unwrap();
@@ -101,13 +90,13 @@ fn kzg_test_() {
         OsRng,
         &mut transcript,
     )
-    .expect("proof generation should not fail");
+    .expect("proof generation should not fail!");
 
     let proof: Vec<u8> = transcript.finalize();
     
     println!("proof len = {:?}", proof.len());
 
-    let empty_circuit: DarkDexCircuit = DarkDexCircuit::default();
+   let empty_circuit: DarkDexCircuit = DarkDexCircuit::default();
     let vk_from_empty = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
 
     let strategy = SingleStrategy::new(&params);
@@ -127,7 +116,7 @@ fn kzg_test_() {
 /////////////////
 #[test]
 fn generate_and_backup_kzg_params_test() {
-    let k = 18;
+    let k = 8;
     setup_and_backup_kzg_params(k, "kzg_params.bin".to_string());
 }
 
@@ -139,48 +128,31 @@ fn generate_and_backup_verification_key_test() {
 
 #[test]
 fn full_test_with_backuped_params() {
-    let sk_raw = random::<u64>();
+    let sk_u_raw = random::<u64>();
     let token_type_raw = 1u64;
     let private_note_sum_raw = 1000u64;
-    let vault_rand_val_raw = 111u64;
 
-    let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::from(sk_raw);
-    let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
-    let g = Secp256k1Affine::generator();
-    
+
+    println!("sk_u_raw = {:#x}", sk_u_raw);
+
+    let sk_u = Fr::from(sk_u_raw);
     let token_type = Fr::from(token_type_raw);
     let private_note_sum = Fr::from(private_note_sum_raw);
-    let vault_rand_val = Fr::from(vault_rand_val_raw);
+ 
 
-    let deposit_identifier_data_sum  = token_type + private_note_sum + vault_rand_val;
+    let sk_u_commitment = poseidon_hash([sk_u, Fr::zero()]);
 
-    let pk_x_limb_0 = consume_uint128_11(&pk.x.to_bytes().to_vec()[0..11]);
-    let pk_x_limb_1 = consume_uint128_11(&pk.x.to_bytes().to_vec()[11..22]);
-    let pk_x_limb_2 = consume_uint128_10(&pk.x.to_bytes().to_vec()[22..]);
+    let data_to_hash = [sk_u_commitment, private_note_sum, token_type, sk_u];
 
-    let pk_y_limb_0 = consume_uint128_11(&pk.y.to_bytes().to_vec()[0..11]);
-    let pk_y_limb_1 = consume_uint128_11(&pk.y.to_bytes().to_vec()[11..22]);
-    let pk_y_limb_2 = consume_uint128_10(&pk.y.to_bytes().to_vec()[22..]);
-
-
-    let key_data_sum = (sk_raw as u128) + pk_x_limb_0 + pk_x_limb_1 + pk_x_limb_2 + pk_y_limb_0 + pk_y_limb_1 + pk_y_limb_2;
-
-    let key_data_sum = Fr::from_u128(key_data_sum);
-
-    let digest = poseidon_hash([key_data_sum, deposit_identifier_data_sum]);
-    
-
-    println!("digest: {:?}", digest.to_bytes());
+    let digest = poseidon_hash(data_to_hash);
 
     let mut pub_inputs = vec![private_note_sum, token_type, digest];
-
-    
 
     /////
 
     let params = read_kzg_params("kzg_params.bin".to_string());
 
-    let proof = generate_proof(&params, Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g), &mut pub_inputs);
+    let proof = generate_proof(&params, Some(token_type), Some(private_note_sum), Some(sk_u), Some(sk_u_commitment),  &mut pub_inputs);
 
     std::fs::write("proof.bin".to_string(), proof.clone()).unwrap();
 
