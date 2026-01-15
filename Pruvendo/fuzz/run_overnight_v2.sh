@@ -1,17 +1,15 @@
 #!/bin/bash
-# Overnight Fuzzing Script v2 - NEW + RETRY targets
+# Overnight Fuzzing Script v2 - NEW targets only
 # Created: 2026-01-15
+# Updated: 2026-01-16
 #
 # This script includes:
 # - 16 NEW targets (added after first overnight run)
-# - 4 RETRY targets (crashed in v1, need re-testing)
 #
-# Categories:
-# - Deep protocol analysis (6 targets)
-# - Component audits: Poseidon, FpChip, scalar_multiply (4 targets)
-# - P1+P2 testing plan completion (3 targets)
-# - Edge case testing (3 targets)
-# - RETRY: Crashed in v1 overnight run (4 targets)
+# NOTE:
+# - Known crashing targets (BC-001, BC-005, BC-007) in run_overnight_known_crashes.sh
+# - Transient targets (fuzz_proof_mutations, fuzz_structured_proof) moved back to
+#   run_overnight.sh after crash files were cleaned
 
 set -e
 
@@ -19,21 +17,6 @@ set -e
 FUZZ_TIME=${1:-600}  # Default: 10 minutes per target
 FUZZ_DIR="Pruvendo/fuzz"
 LOG_FILE="fuzz_overnight_v2_$(date +%Y%m%d_%H%M%S).log"
-
-# ============================================
-# RETRY targets - crashed in v1, need re-testing
-# ============================================
-# These crashed in the first overnight run:
-# - fuzz_multikey_digest: BC-007 deposit_sum collision (expected behavior)
-# - fuzz_digest_collision: BC-007 same issue
-# - fuzz_proving_key_bytes: BC-005 upstream halo2_proofs panic on malformed data
-# - fuzz_verifier_bytes: BC-001 upstream halo2curves panic on short input
-RETRY_TARGETS=(
-    "fuzz_multikey_digest"
-    "fuzz_digest_collision"
-    "fuzz_proving_key_bytes"
-    "fuzz_verifier_bytes"
-)
 
 # ============================================
 # NEW targets (16 total) - not run in v1
@@ -64,11 +47,10 @@ NEW_TARGETS=(
     "fuzz_range_check_bypass"
 )
 
-# Combine all targets
-TARGETS=("${RETRY_TARGETS[@]}" "${NEW_TARGETS[@]}")
+# All targets (16 total)
+TARGETS=("${NEW_TARGETS[@]}")
 
-echo "=== Overnight Fuzzing v2: NEW + RETRY Targets ===" | tee "$LOG_FILE"
-echo "RETRY targets (4): ${RETRY_TARGETS[*]}" | tee -a "$LOG_FILE"
+echo "=== Overnight Fuzzing v2: NEW Targets ===" | tee "$LOG_FILE"
 echo "NEW targets (16): see log for details" | tee -a "$LOG_FILE"
 echo "Started: $(date)" | tee -a "$LOG_FILE"
 echo "Time per target: ${FUZZ_TIME}s" | tee -a "$LOG_FILE"
