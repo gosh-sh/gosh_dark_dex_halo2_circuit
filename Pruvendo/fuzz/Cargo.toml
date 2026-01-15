@@ -213,3 +213,47 @@ path = "fuzz_targets/fuzz_witness_manipulation.rs"
 test = false
 doc = false
 bench = false
+
+# === NEW DEEP FUZZING TARGETS (2026-01-15) ===
+
+[[bin]]
+name = "fuzz_constraint_bypass"
+path = "fuzz_targets/fuzz_constraint_bypass.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_public_input_mismatch"
+path = "fuzz_targets/fuzz_public_input_mismatch.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_weak_generator"
+path = "fuzz_targets/fuzz_weak_generator.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_digest_preimage"
+path = "fuzz_targets/fuzz_digest_preimage.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_cross_keypair_attack"
+path = "fuzz_targets/fuzz_cross_keypair_attack.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_limb_reconstruction"
+path = "fuzz_targets/fuzz_limb_reconstruction.rs"
+test = false
+doc = false
+bench = false

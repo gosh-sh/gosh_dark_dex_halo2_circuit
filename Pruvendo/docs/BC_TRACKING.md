@@ -1,5 +1,40 @@
 # Bug Candidate Tracking - Отслеживание потенциальных проблем
 
+## Статус ночного фаззинга (15.01.2026)
+
+**Запущено**: 26 fuzz targets, 5 часов (03:20 - 08:24)
+
+| Target | Runs | Статус | Направление |
+|--------|------|--------|-------------|
+| fuzz_soundness | 177 | ✅ OK | Базовый soundness |
+| fuzz_soundness_extended | 122 | ✅ OK | Расширенный soundness |
+| fuzz_completeness | 146 | ✅ OK | Completeness |
+| fuzz_determinism | 42 | ✅ OK | Детерминизм |
+| fuzz_token_binding | 90 | ✅ OK | Token binding |
+| fuzz_sum_binding | 84 | ✅ OK | Sum binding |
+| fuzz_vault_rand_binding | 112 | ✅ OK | Vault binding |
+| fuzz_vault_zero_binding | 84 | ✅ OK | Vault = 0 |
+| fuzz_edge_cases | 101 | ✅ OK | Edge cases |
+| fuzz_poseidon_preimage | 106 | ✅ OK | Preimage |
+| fuzz_poseidon_consistency | 3.7M | ✅ OK | Hash consistency |
+| fuzz_digest_collision | 1 | ⚠️ BC-007 | Collision (не эксплуатируется) |
+| fuzz_deposit_sum_collision | 224M | ✅ OK | deposit_sum collisions |
+| fuzz_key_sum_collision | 695K | ✅ OK | key_sum collisions |
+| fuzz_multikey_digest | 1 | ⚠️ = BC-007 | Multi-key digest |
+| fuzz_limb_overflow | 4.1K | ✅ OK | Limb overflow |
+| fuzz_field_wrap | 1.1M | ✅ OK | Field wrap |
+| fuzz_ec_invalid_points | 9.7K | ✅ OK | Invalid EC points |
+| fuzz_ec_coordinate_manipulation | 5.1K | ✅ OK | Coordinate манипуляции |
+| fuzz_negated_y | 3K | ✅ OK | -y coordinates |
+| fuzz_witness_manipulation | 4.2K | ✅ OK | Witness манипуляции |
+| fuzz_proof_mutations | 30K | ✅ OK | Proof mutations |
+| fuzz_structured_proof | 53M | ✅ OK | Structured mutations |
+| fuzz_proof_replay | 58 | ✅ OK | Proof replay |
+| fuzz_proving_key_bytes | 3 | ⚠️ BC-005 | Corrupted PK (upstream) |
+| fuzz_verifier_bytes | 3 | ⚠️ BC-001 | Corrupted VK (upstream) |
+
+---
+
 ## Быстрый старт
 
 ```bash
