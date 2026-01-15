@@ -206,6 +206,7 @@ dependencies = [
  "halo2-base",
  "halo2-ecc",
  "halo2_proofs",
+ "poseidon-base",
  "proptest",
  "rand 0.8.5",
 ]

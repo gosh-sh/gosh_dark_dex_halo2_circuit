@@ -287,3 +287,10 @@ path = "fuzz_targets/fuzz_poseidon_algebraic.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_poseidon_gadget_consistency"
+path = "fuzz_targets/fuzz_poseidon_gadget_consistency.rs"
+test = false
+doc = false
+bench = false
