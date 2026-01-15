@@ -15,7 +15,7 @@ cargo test test_corrupted_kzg_params_bytes --release -- --ignored --nocapture  #
 cargo test bug006 --release -- --ignored --nocapture  # BUG-006
 ```
 
-## Список багов (актуальный статус на 2026-01-14)
+## Список багов (актуальный статус на 2026-01-15)
 
 | ID | Название | Severity | Текущий статус |
 |----|----------|----------|----------------|
@@ -26,6 +26,7 @@ cargo test bug006 --release -- --ignored --nocapture  # BUG-006
 | BUG-004 | shl_overflow в commitment.rs | Medium | ✅ FIXED |
 | BUG-005 | shl_overflow в domain.rs | Medium | Дубликат BUG-004 |
 | BUG-006 | Non-canonical field elements | Low | ✅ Не soundness bug |
+| **BUG-007** | **deposit_sum коллизии** | **High** | **🔴 НАЙДЕН ФАЗЗИНГОМ** |
 
 ## Детали каждого бага
 
@@ -58,6 +59,31 @@ cargo test bug006 --release -- --ignored --nocapture  # BUG-006
 - **Воспроизведение:** `cargo test bug006 --release -- --ignored --nocapture`
 - **Статус:** НЕ soundness bug - elements редуцируются при арифметике
 - **Рекомендация:** Low priority, informational
+
+### BUG-007: deposit_sum коллизии (КРИТИЧЕСКИЙ)
+- **Найден:** Ночным фаззингом 15.01.2026
+- **Fuzz targets:** `fuzz_digest_collision`, `fuzz_multikey_digest`
+- **Воспроизведение:**
+  ```bash
+  cargo +nightly fuzz run fuzz_digest_collision --fuzz-dir Pruvendo/fuzz \
+    Pruvendo/fuzz/artifacts/fuzz_digest_collision/crash-bf9dd64e8719cdd48add91072c80230cbe2ad6cb
+  ```
+- **Суть проблемы:**
+  - `deposit_sum = token + sum + vault` (аддитивная формула)
+  - Разные комбинации `(token, vault)` с одинаковой суммой дают одинаковый `deposit_sum`
+  - Пример: `(token=91577, vault=691321)` и `(token=93113, vault=689785)` дают одинаковый digest
+- **Влияние на безопасность:**
+  - Злоумышленник может создать разные notes с одинаковым digest
+  - Публичные данные (token, sum) не разделены от приватных (vault)
+- **Рекомендация:** Изменить формулу:
+  ```
+  digest = poseidon_hash([key_sum, token, sum, vault])  // раздельно
+  ```
+  вместо:
+  ```
+  deposit_sum = token + sum + vault
+  digest = poseidon_hash([key_sum, deposit_sum])
+  ```
 
 ## Система отслеживания
 
