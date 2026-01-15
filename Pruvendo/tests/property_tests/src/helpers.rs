@@ -400,113 +400,149 @@ mod helper_tests {
 }
 
 // ============================================================================
-// BUG TRACKING - Система отслеживания известных багов
+// BUG CANDIDATE TRACKING - Система отслеживания потенциальных багов
 // ============================================================================
+// NOTE: We use "Bug Candidate" (BC) instead of "Bug" because we cannot be
+// 100% certain something is a bug until fully verified. See AGENTS.md.
 
-/// Статус бага
+/// Статус bug candidate
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BugStatus {
-    /// Баг воспроизводится в текущей версии
+pub enum BugCandidateStatus {
+    /// Bug candidate воспроизводится в текущей версии
     Reproduced,
-    /// Баг исправлен
+    /// Bug candidate исправлен / не подтвердился
     Fixed,
     /// Статус неизвестен (тест пропущен)
     Skipped,
 }
 
-/// Информация о баге
-pub struct BugInfo {
+// Backwards compatibility alias
+pub type BugStatus = BugCandidateStatus;
+
+/// Информация о bug candidate
+pub struct BugCandidateInfo {
     pub id: &'static str,
     pub title: &'static str,
     pub location: &'static str,
     pub severity: &'static str,
 }
 
-/// Известные баги
-pub mod known_bugs {
-    use super::BugInfo;
+// Backwards compatibility alias
+pub type BugInfo = BugCandidateInfo;
 
-    pub const BUG_001: BugInfo = BugInfo {
-        id: "BUG-001",
+/// Известные bug candidates
+pub mod known_bugs {
+    use super::BugCandidateInfo;
+
+    pub const BC_001: BugCandidateInfo = BugCandidateInfo {
+        id: "BC-001",
         title: "Panic при некорректном VK bytes",
         location: "halo2curves (upstream)",
         severity: "Medium",
     };
 
-    pub const BUG_002: BugInfo = BugInfo {
-        id: "BUG-002",
+    pub const BC_002: BugCandidateInfo = BugCandidateInfo {
+        id: "BC-002",
         title: "Panic при g = identity point",
         location: "subtle crate (upstream)",
         severity: "Medium",
     };
 
-    pub const BUG_003: BugInfo = BugInfo {
-        id: "BUG-003",
+    pub const BC_003: BugCandidateInfo = BugCandidateInfo {
+        id: "BC-003",
         title: "shl_overflow при corrupted KZG header",
-        location: "halo2_proofs (upstream) - дубликат BUG-004",
+        location: "halo2_proofs (upstream) - дубликат BC-005",
         severity: "Medium",
     };
 
-    pub const BUG_004: BugInfo = BugInfo {
-        id: "BUG-004",
+    pub const BC_004: BugCandidateInfo = BugCandidateInfo {
+        id: "BC-004",
         title: "shl_overflow в commitment.rs",
         location: "halo2_proofs (upstream)",
         severity: "Medium",
     };
 
-    pub const BUG_005: BugInfo = BugInfo {
-        id: "BUG-005",
+    pub const BC_005: BugCandidateInfo = BugCandidateInfo {
+        id: "BC-005",
         title: "shl_overflow в domain.rs",
         location: "halo2_proofs (upstream)",
         severity: "Medium",
     };
 
-    pub const BUG_006: BugInfo = BugInfo {
-        id: "BUG-006",
+    pub const BC_006: BugCandidateInfo = BugCandidateInfo {
+        id: "BC-006",
         title: "Non-canonical field elements принимаются при десериализации",
         location: "halo2curves SerdeFormat::RawBytesUnchecked",
-        severity: "Low (не soundness bug)",
+        severity: "Low (не soundness bug candidate)",
     };
+
+    pub const BC_007: BugCandidateInfo = BugCandidateInfo {
+        id: "BC-007",
+        title: "deposit_sum коллизии из-за аддитивной формулы",
+        location: "circuit.rs deposit_sum = token + sum + vault",
+        severity: "High",
+    };
+
+    // Backwards compatibility aliases
+    pub const BUG_001: &BugCandidateInfo = &BC_001;
+    pub const BUG_002: &BugCandidateInfo = &BC_002;
+    pub const BUG_003: &BugCandidateInfo = &BC_003;
+    pub const BUG_004: &BugCandidateInfo = &BC_004;
+    pub const BUG_005: &BugCandidateInfo = &BC_005;
+    pub const BUG_006: &BugCandidateInfo = &BC_006;
 }
 
-/// Логирует результат теста бага
-pub fn report_bug_status(bug: &BugInfo, status: BugStatus) {
+/// Логирует результат теста bug candidate
+pub fn report_bug_candidate_status(bc: &BugCandidateInfo, status: BugCandidateStatus) {
     match status {
-        BugStatus::Reproduced => {
+        BugCandidateStatus::Reproduced => {
             eprintln!("┌─────────────────────────────────────────────────────────────┐");
-            eprintln!("│ {} STATUS: ⚠️  REPRODUCED", bug.id);
-            eprintln!("│ Title: {}", bug.title);
-            eprintln!("│ Location: {}", bug.location);
-            eprintln!("│ Severity: {}", bug.severity);
+            eprintln!("│ {} STATUS: ⚠️  REPRODUCED", bc.id);
+            eprintln!("│ Title: {}", bc.title);
+            eprintln!("│ Location: {}", bc.location);
+            eprintln!("│ Severity: {}", bc.severity);
             eprintln!("└─────────────────────────────────────────────────────────────┘");
         }
-        BugStatus::Fixed => {
+        BugCandidateStatus::Fixed => {
             eprintln!("┌─────────────────────────────────────────────────────────────┐");
-            eprintln!("│ {} STATUS: ✅ FIXED", bug.id);
-            eprintln!("│ Title: {}", bug.title);
-            eprintln!("│ The bug no longer reproduces in current version");
+            eprintln!("│ {} STATUS: ✅ NOT CONFIRMED / FIXED", bc.id);
+            eprintln!("│ Title: {}", bc.title);
+            eprintln!("│ The bug candidate no longer reproduces in current version");
             eprintln!("└─────────────────────────────────────────────────────────────┘");
         }
-        BugStatus::Skipped => {
+        BugCandidateStatus::Skipped => {
             eprintln!("┌─────────────────────────────────────────────────────────────┐");
-            eprintln!("│ {} STATUS: ⏭️  SKIPPED", bug.id);
-            eprintln!("│ Title: {}", bug.title);
+            eprintln!("│ {} STATUS: ⏭️  SKIPPED", bc.id);
+            eprintln!("│ Title: {}", bc.title);
             eprintln!("│ Reason: Required files not found");
             eprintln!("└─────────────────────────────────────────────────────────────┘");
         }
     }
 }
 
-/// Выполняет код и возвращает статус бага
-/// Если код паникует - баг воспроизводится
-/// Если код выполняется успешно - баг исправлен
-pub fn check_bug_status<F, R>(f: F) -> BugStatus
+// Backwards compatibility alias
+pub fn report_bug_status(bug: &BugInfo, status: BugStatus) {
+    report_bug_candidate_status(bug, status);
+}
+
+/// Выполняет код и возвращает статус bug candidate
+/// Если код паникует - bug candidate воспроизводится
+/// Если код выполняется успешно - bug candidate не подтвердился
+pub fn check_bug_candidate_status<F, R>(f: F) -> BugCandidateStatus
 where
     F: FnOnce() -> R + std::panic::UnwindSafe,
 {
     match std::panic::catch_unwind(f) {
-        Ok(_) => BugStatus::Fixed,
-        Err(_) => BugStatus::Reproduced,
+        Ok(_) => BugCandidateStatus::Fixed,
+        Err(_) => BugCandidateStatus::Reproduced,
     }
+}
+
+// Backwards compatibility alias
+pub fn check_bug_status<F, R>(f: F) -> BugStatus
+where
+    F: FnOnce() -> R + std::panic::UnwindSafe,
+{
+    check_bug_candidate_status(f)
 }
 

@@ -37,7 +37,7 @@
 | C-02 | `test_pk_identity_point` | pk = identity point | ✅ PASS |
 | X-01 | `test_sk_curve_order` | sk = large value near field boundary | ✅ PASS |
 | X-02 | `test_values_near_fr_modulus` | token/sum = u64::MAX | ✅ PASS |
-| X-03 | `test_generator_identity` | g = identity point | 🐛 BUG-002 (panic) |
+| X-03 | `test_generator_identity` | g = identity point | 🐛 BC-002 (panic) |
 | P-01 | `test_prover_mismatched_private_public` | private ≠ public values | ✅ PASS |
 | P-03 | `test_circuit_size_requirement` | k=18 работает | ✅ PASS |
 | P-04 | `test_proof_size_consistency` | proof size константен | ✅ (ignored - требует файлы) |
@@ -106,7 +106,7 @@
 | Свойство | Статус | Тесты |
 |----------|--------|-------|
 | Valid proof accepts | ✅ | verifier_sketch_test |
-| Corrupted VK handling | 🐛 BUG-001 | fuzz_verifier_bytes |
+| Corrupted VK handling | 🐛 BC-001 | fuzz_verifier_bytes |
 
 ### Реализованные тесты:
 | ID | Тест | Описание | Статус |
@@ -156,14 +156,14 @@
 
 | ID | Severity | Компонент | Описание | Статус |
 |----|----------|-----------|----------|--------|
-| BUG-001 | Medium | verifier.rs | Panic при некорректном VK (unwrap в halo2curves) | Open |
-| BUG-002 | Medium | circuit.rs | Panic при g = identity point (subtle assertion) | Open |
-| BUG-003 | High | prover.rs | OOM при corrupted KZG params header (читает размер из мусора → 2PB allocation) | Open |
-| BUG-004 | Medium | halo2curves/bn256/fq.rs | Panic при коротких данных (8 байт) в ParamsKZG::read_custom - UnexpectedEof | Open |
-| BUG-005 | Medium | halo2_proofs/keygen.rs | Panic shl_overflow в create_domain при парсинге VK из corrupted данных | Open |
-| **BUG-006** | **CRITICAL** | verifier.rs | Мутированный proof принимается верификатором (изменение 1 байта не детектируется) | Open |
+| BC-001 | Medium | verifier.rs | Panic при некорректном VK (unwrap в halo2curves) | Open |
+| BC-002 | Medium | circuit.rs | Panic при g = identity point (subtle assertion) | Open |
+| BC-003 | High | prover.rs | OOM при corrupted KZG params header (читает размер из мусора → 2PB allocation) | Open |
+| BC-004 | Medium | halo2curves/bn256/fq.rs | Panic при коротких данных (8 байт) в ParamsKZG::read_custom - UnexpectedEof | Open |
+| BC-005 | Medium | halo2_proofs/keygen.rs | Panic shl_overflow в create_domain при парсинге VK из corrupted данных | Open |
+| **BC-006** | **CRITICAL** | verifier.rs | Мутированный proof принимается верификатором (изменение 1 байта не детектируется) | Open |
 
-### BUG-005: Panic shl_overflow при парсинге VK
+### BC-005: Panic shl_overflow при парсинге VK
 
 **Найден фаззингом**: `fuzz_proving_key_bytes`
 
@@ -181,7 +181,7 @@ panic_const_shl_overflow at halo2_proofs::plonk::keygen::create_domain
 
 ---
 
-### BUG-006: **КРИТИЧЕСКИЙ** - Мутированный proof принимается верификатором
+### BC-006: **КРИТИЧЕСКИЙ** - Мутированный proof принимается верификатором
 
 **Найден фаззингом**: `fuzz_proof_mutations`
 
@@ -229,7 +229,7 @@ cargo +nightly fuzz run fuzz_proof_mutations fuzz/artifacts/fuzz_proof_mutations
 
 ---
 
-### BUG-004: Panic при коротких данных в десериализации
+### BC-004: Panic при коротких данных в десериализации
 
 **Найден фаззингом**: `fuzz_verifier_bytes`
 
@@ -260,28 +260,28 @@ called `Result::unwrap()` on an `Err` value: Error { kind: UnexpectedEof, messag
 | fuzz_soundness | Базовый soundness тест | ✅ Работает |
 | fuzz_completeness | Тест completeness | ✅ Работает |
 | fuzz_determinism | Детерминизм proof generation | ✅ Работает |
-| fuzz_verifier_bytes | Corrupted VK/params | 🐛 BUG-004 |
+| fuzz_verifier_bytes | Corrupted VK/params | 🐛 BC-004 |
 | fuzz_token_binding | Token type binding | ✅ Работает |
 | fuzz_sum_binding | Sum binding | ✅ Работает |
 | fuzz_edge_cases | Граничные значения | ✅ Работает |
-| fuzz_proof_mutations | Мутации proof | ✅ Работает (BUG-006 не soundness) |
-| fuzz_proving_key_bytes | Corrupted PK/VK | 🐛 BUG-005 |
+| fuzz_proof_mutations | Мутации proof | ✅ Работает (BC-006 не soundness) |
+| fuzz_proving_key_bytes | Corrupted PK/VK | 🐛 BC-005 |
 | fuzz_structured_proof | Structure-aware мутации | ✅ Работает |
 | fuzz_poseidon_preimage | Poseidon preimage resistance | ✅ Работает |
 | fuzz_vault_rand_binding | Vault randomness binding | ✅ Работает |
 
 ### Статистика:
 - **Всего fuzz targets**: 12
-- **Найдено багов**: 5 (BUG-001 - BUG-005)
-- **Критических багов**: 0 (BUG-006 исследован - не soundness)
+- **Найдено багов**: 5 (BC-001 - BC-005)
+- **Критических багов**: 0 (BC-006 исследован - не soundness)
 - **Время фаззинга**: ~5 минут на target
 
 ### Рекомендации по приоритетам:
 
-1. **ВЫСОКИЙ (BUG-003)**: OOM при corrupted KZG params
+1. **ВЫСОКИЙ (BC-003)**: OOM при corrupted KZG params
    - Добавить валидацию размера перед аллокацией
 
-2. **СРЕДНИЙ (BUG-001, BUG-002, BUG-004, BUG-005)**: Panic при corrupted input
+2. **СРЕДНИЙ (BC-001, BC-002, BC-004, BC-005)**: Panic при corrupted input
    - Заменить unwrap() на proper error handling
 
 ---
@@ -330,7 +330,7 @@ called `Result::unwrap()` on an `Err` value: Error { kind: UnexpectedEof, messag
 | GEN-01 | `prop_gen_01_custom_generator_valid` | Случайные генераторы работают | ✅ PASS |
 | GEN-02 | `test_gen_02_wrong_pk_for_custom_generator` | Неверный pk отклоняется | ✅ PASS |
 | GEN-03 | `test_gen_03_generator_equals_pk` | g = pk отклоняется | ✅ PASS |
-| GEN-04 | `test_gen_04_generator_identity` | g = identity вызывает panic (BUG-002) | ✅ PASS |
+| GEN-04 | `test_gen_04_generator_identity` | g = identity вызывает panic (BC-002) | ✅ PASS |
 | OVF-01 | `test_ovf_01_max_limb_values` | Максимальные limbs не переполняют | ✅ PASS |
 | OVF-02 | `prop_ovf_02_extreme_sk_no_overflow` | Экстремальные sk не переполняют | ✅ PASS |
 | OVF-03 | `test_ovf_03_deposit_identifier_max_values` | u64::MAX значения работают | ✅ PASS |

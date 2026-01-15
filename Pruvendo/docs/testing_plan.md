@@ -350,7 +350,7 @@ cargo test --manifest-path Pruvendo/tests/property_tests/Cargo.toml --release
 - [x] Создание fuzz targets для edge cases
 - [x] Запуск fuzzing кампании и анализ результатов
 
-**Найдено 6 багов**: BUG-001 - BUG-006 (см. component_testing_plan.md)
+**Найдено 6 багов**: BC-001 - BC-006 (см. component_testing_plan.md)
 
 ### Фаза 3: Расширенное тестирование схемы (НОВОЕ)
 
@@ -375,7 +375,7 @@ cargo test --manifest-path Pruvendo/tests/property_tests/Cargo.toml --release
 - [ ] **GEN-01**: Нестандартный генератор (точка на кривой, но не G)
 - [ ] **GEN-02**: Генератор с малым порядком (если существует)
 - [ ] **GEN-03**: g = pk (самоссылка)
-- [ ] **GEN-04**: g = identity (уже есть, BUG-002)
+- [ ] **GEN-04**: g = identity (уже есть, BC-002)
 
 #### 3.5 Тесты на Overflow (proptest)
 - [ ] **OVF-01**: limb values близкие к Fr::MODULUS
@@ -403,7 +403,7 @@ cargo test --manifest-path Pruvendo/tests/property_tests/Cargo.toml --release
 После выполнения плана тестирования:
 - ✅ Все существующие тесты проходят (82 теста)
 - ✅ Property-based тесты покрывают инварианты (73 теста)
-- ✅ Fuzzing выполнен, найдено 6 багов (BUG-001 - BUG-006)
+- ✅ Fuzzing выполнен, найдено 6 багов (BC-001 - BC-006)
 - ⬜ Тесты на limb decomposition (LIMB-01 - LIMB-05)
 - ⬜ Тесты на коллизии key_data_sum (COLL-01 - COLL-03)
 - ⬜ Тесты на binding deposit_identifier (BIND-01 - BIND-03)

@@ -737,7 +737,7 @@ fn test_values_near_fr_modulus() {
 // ============================================================
 
 /// X-03: g = identity (невалидный генератор)
-/// BUG-002: Схема паникует при g = identity point
+/// BC-002: Схема паникует при g = identity point
 ///
 /// Этот тест ДОКУМЕНТИРУЕТ известный баг в upstream библиотеке (subtle crate).
 /// Запуск: cargo test test_generator_identity --release -- --nocapture
@@ -756,7 +756,7 @@ fn test_generator_identity() {
         check_circuit_with_mock(sk, pk, g_identity, 1, 1000, sk_val, 0)
     });
 
-    report_bug_status(&known_bugs::BUG_002, status);
+    report_bug_status(&known_bugs::BC_002, status);
     // Тест всегда проходит - это документирование известного бага
 }
 
@@ -958,7 +958,7 @@ fn test_stress_random_keypairs() {
 // NEGATIVE TESTS: Serialization
 // ============================================================
 
-/// BUG-001: Panic при некорректном VK bytes (header)
+/// BC-001: Panic при некорректном VK bytes (header)
 /// Запуск: cargo test test_corrupted_vk_bytes_header --release -- --ignored --nocapture
 #[test]
 #[ignore] // Требует verification_key.bin
@@ -970,7 +970,7 @@ fn test_corrupted_vk_bytes_header() {
     let mut vk_bytes = match std::fs::read("verification_key.bin") {
         Ok(b) => b,
         Err(_) => {
-            report_bug_status(&known_bugs::BUG_001, crate::helpers::BugStatus::Skipped);
+            report_bug_status(&known_bugs::BC_001, crate::helpers::BugStatus::Skipped);
             return;
         }
     };
@@ -986,10 +986,10 @@ fn test_corrupted_vk_bytes_header() {
         verification_key_from_bytes(&vk_bytes)
     });
 
-    report_bug_status(&known_bugs::BUG_001, status);
+    report_bug_status(&known_bugs::BC_001, status);
 }
 
-/// BUG-001: Panic при некорректном VK bytes (middle)
+/// BC-001: Panic при некорректном VK bytes (middle)
 /// Запуск: cargo test test_corrupted_vk_bytes_middle --release -- --ignored --nocapture
 #[test]
 #[ignore] // Требует verification_key.bin
@@ -1001,7 +1001,7 @@ fn test_corrupted_vk_bytes_middle() {
     let mut vk_bytes = match std::fs::read("verification_key.bin") {
         Ok(b) => b,
         Err(_) => {
-            report_bug_status(&known_bugs::BUG_001, crate::helpers::BugStatus::Skipped);
+            report_bug_status(&known_bugs::BC_001, crate::helpers::BugStatus::Skipped);
             return;
         }
     };
@@ -1018,7 +1018,7 @@ fn test_corrupted_vk_bytes_middle() {
         verification_key_from_bytes(&vk_bytes)
     });
 
-    report_bug_status(&known_bugs::BUG_001, status);
+    report_bug_status(&known_bugs::BC_001, status);
 }
 
 /// SER-03: Truncated VK bytes
@@ -1096,9 +1096,9 @@ fn test_random_garbage_vk() {
 }
 
 /// SER-06: Corrupted KZG params - проверяем read_kzg_params
-/// BUG-004/BUG-005: shl_overflow при corrupted KZG params (middle bytes)
+/// BC-004/BC-005: shl_overflow при corrupted KZG params (middle bytes)
 /// Запуск: cargo test test_corrupted_kzg_params_bytes --release -- --ignored --nocapture
-/// ВНИМАНИЕ: НЕ портит header, т.к. это вызывает OOM (BUG-003)
+/// ВНИМАНИЕ: НЕ портит header, т.к. это вызывает OOM (BC-003)
 #[test]
 #[ignore] // Требует kzg_params.bin
 fn test_corrupted_kzg_params_bytes() {
@@ -1110,7 +1110,7 @@ fn test_corrupted_kzg_params_bytes() {
     let mut params_bytes = match std::fs::read("kzg_params.bin") {
         Ok(b) => b,
         Err(_) => {
-            report_bug_status(&known_bugs::BUG_004, BugStatus::Skipped);
+            report_bug_status(&known_bugs::BC_004, BugStatus::Skipped);
             return;
         }
     };
@@ -1128,10 +1128,10 @@ fn test_corrupted_kzg_params_bytes() {
     });
 
     let _ = std::fs::remove_file(temp_path);
-    report_bug_status(&known_bugs::BUG_004, status);
+    report_bug_status(&known_bugs::BC_004, status);
 }
 
-/// BUG-003: Corrupted KZG header causes OOM/panic
+/// BC-003: Corrupted KZG header causes OOM/panic
 /// Запуск: cargo test test_corrupted_kzg_header_bug003 --release -- --ignored --nocapture
 /// ОПАСНО: Может вызвать OOM при попытке выделить петабайты памяти!
 #[test]
@@ -1145,7 +1145,7 @@ fn test_corrupted_kzg_header_bug003() {
     let mut params_bytes = match std::fs::read("kzg_params.bin") {
         Ok(b) => b,
         Err(_) => {
-            report_bug_status(&known_bugs::BUG_003, BugStatus::Skipped);
+            report_bug_status(&known_bugs::BC_003, BugStatus::Skipped);
             return;
         }
     };
@@ -1162,7 +1162,7 @@ fn test_corrupted_kzg_header_bug003() {
     });
 
     let _ = std::fs::remove_file(temp_path);
-    report_bug_status(&known_bugs::BUG_003, status);
+    report_bug_status(&known_bugs::BC_003, status);
 }
 
 /// SER-07: Proof bytes с неверной длиной
@@ -1269,7 +1269,7 @@ fn test_vk_params_mismatch() {
 }
 
 // ============================================================
-// BUG-006: Non-canonical field element representation
+// BC-006: Non-canonical field element representation
 // ============================================================
 //
 // СТАТУС: Low severity (НЕ soundness bug)
@@ -1282,10 +1282,10 @@ fn test_vk_params_mismatch() {
 //
 // Модуль Fq для BN254: 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
 //
-// КАК ЗАПУСТИТЬ ТЕСТЫ BUG-006:
+// КАК ЗАПУСТИТЬ ТЕСТЫ BC-006:
 // cargo test bug006 --release -- --ignored --nocapture
 
-/// BUG-006a: Тест на манипуляцию битом 7 в VK (x-координата)
+/// BC-006a: Тест на манипуляцию битом 7 в VK (x-координата)
 /// Запуск: cargo test test_bug006_vk_bit7_manipulation_x_coord --release -- --ignored --nocapture
 #[test]
 #[ignore] // Требует verification_key.bin
@@ -1309,13 +1309,13 @@ fn test_bug006_vk_bit7_manipulation_x_coord() {
 
     // Проверяем что бит 7 изначально не установлен
     let original_byte = original_vk_bytes[x_last_byte_offset];
-    println!("BUG-006a: Original byte at offset {}: 0x{:02x}", x_last_byte_offset, original_byte);
+    println!("BC-006a: Original byte at offset {}: 0x{:02x}", x_last_byte_offset, original_byte);
 
     // Модифицируем: устанавливаем бит 7 (0x80)
     let mut modified_vk_bytes = original_vk_bytes.clone();
     modified_vk_bytes[x_last_byte_offset] |= 0x80;
 
-    println!("BUG-006a: Modified byte: 0x{:02x}", modified_vk_bytes[x_last_byte_offset]);
+    println!("BC-006a: Modified byte: 0x{:02x}", modified_vk_bytes[x_last_byte_offset]);
 
     // Пытаемся загрузить модифицированный VK
     let result = std::panic::catch_unwind(|| {
@@ -1326,7 +1326,7 @@ fn test_bug006_vk_bit7_manipulation_x_coord() {
         Ok(_vk) => {
             // VK загрузился! Это потенциальная проблема.
             // Теперь проверим, работает ли верификация с этим VK
-            println!("BUG-006a WARNING: Modified VK with bit 7 set was successfully parsed!");
+            println!("BC-006a WARNING: Modified VK with bit 7 set was successfully parsed!");
             println!("This confirms that RawBytesUnchecked does NOT validate field elements.");
 
             // Дополнительно: проверим что оригинальный и модифицированный VK дают разные результаты
@@ -1334,12 +1334,12 @@ fn test_bug006_vk_bit7_manipulation_x_coord() {
         }
         Err(e) => {
             // VK отклонён - это хорошо!
-            println!("BUG-006a: Modified VK correctly rejected: {:?}", e);
+            println!("BC-006a: Modified VK correctly rejected: {:?}", e);
         }
     }
 }
 
-/// BUG-006b: Тест на манипуляцию битом 7 в VK (y-координата первой точки)
+/// BC-006b: Тест на манипуляцию битом 7 в VK (y-координата первой точки)
 #[test]
 #[ignore] // Требует verification_key.bin
 fn test_bug006_vk_bit7_manipulation_y_coord() {
@@ -1354,12 +1354,12 @@ fn test_bug006_vk_bit7_manipulation_y_coord() {
     let y_last_byte_offset = 8 + 63;
 
     let original_byte = original_vk_bytes[y_last_byte_offset];
-    println!("BUG-006b: Original byte at offset {}: 0x{:02x}", y_last_byte_offset, original_byte);
+    println!("BC-006b: Original byte at offset {}: 0x{:02x}", y_last_byte_offset, original_byte);
 
     let mut modified_vk_bytes = original_vk_bytes.clone();
     modified_vk_bytes[y_last_byte_offset] |= 0x80;
 
-    println!("BUG-006b: Modified byte: 0x{:02x}", modified_vk_bytes[y_last_byte_offset]);
+    println!("BC-006b: Modified byte: 0x{:02x}", modified_vk_bytes[y_last_byte_offset]);
 
     let result = std::panic::catch_unwind(|| {
         verification_key_from_bytes(&modified_vk_bytes)
@@ -1367,15 +1367,15 @@ fn test_bug006_vk_bit7_manipulation_y_coord() {
 
     match result {
         Ok(_vk) => {
-            println!("BUG-006b WARNING: Modified VK (y-coord) with bit 7 set was successfully parsed!");
+            println!("BC-006b WARNING: Modified VK (y-coord) with bit 7 set was successfully parsed!");
         }
         Err(e) => {
-            println!("BUG-006b: Modified VK correctly rejected: {:?}", e);
+            println!("BC-006b: Modified VK correctly rejected: {:?}", e);
         }
     }
 }
 
-/// BUG-006c: Полный тест - модифицированный VK используется для верификации
+/// BC-006c: Полный тест - модифицированный VK используется для верификации
 /// Это критический тест: если proof проходит верификацию с модифицированным VK,
 /// это может быть soundness issue
 #[test]
@@ -1401,7 +1401,7 @@ fn test_bug006_verification_with_modified_vk() {
     let original_vk = verification_key_from_bytes(&original_vk_bytes);
     let original_result = verify_proof_(&params, &proof, &original_vk, pub_inputs.clone());
 
-    println!("BUG-006c: Original VK verification: {}", original_result);
+    println!("BC-006c: Original VK verification: {}", original_result);
     assert!(original_result, "Proof should verify with original VK");
 
     // Модифицируем VK (бит 7 в x-координате первой точки)
@@ -1418,22 +1418,22 @@ fn test_bug006_verification_with_modified_vk() {
     match modified_result {
         Ok(verified) => {
             if verified {
-                println!("BUG-006c CRITICAL: Proof verified with MODIFIED VK!");
+                println!("BC-006c CRITICAL: Proof verified with MODIFIED VK!");
                 println!("This is a potential soundness issue!");
                 // Это может быть проблемой если:
                 // 1. Модифицированный VK даёт тот же результат (collision)
                 // 2. Атакующий может создать proof для модифицированного VK
             } else {
-                println!("BUG-006c: Proof correctly rejected with modified VK");
+                println!("BC-006c: Proof correctly rejected with modified VK");
             }
         }
         Err(e) => {
-            println!("BUG-006c: Verification panicked with modified VK: {:?}", e);
+            println!("BC-006c: Verification panicked with modified VK: {:?}", e);
         }
     }
 }
 
-/// BUG-006d: Тест на манипуляцию битом 6 (sign bit в compressed format)
+/// BC-006d: Тест на манипуляцию битом 6 (sign bit в compressed format)
 /// Бит 6 используется как sign bit в compressed point format
 #[test]
 #[ignore] // Требует verification_key.bin
@@ -1449,13 +1449,13 @@ fn test_bug006_vk_bit6_manipulation() {
     let x_last_byte_offset = 8 + 31;
 
     let original_byte = original_vk_bytes[x_last_byte_offset];
-    println!("BUG-006d: Original byte: 0x{:02x}", original_byte);
+    println!("BC-006d: Original byte: 0x{:02x}", original_byte);
 
     // Устанавливаем бит 6 (0x40)
     let mut modified_vk_bytes = original_vk_bytes.clone();
     modified_vk_bytes[x_last_byte_offset] |= 0x40;
 
-    println!("BUG-006d: Modified byte (bit 6): 0x{:02x}", modified_vk_bytes[x_last_byte_offset]);
+    println!("BC-006d: Modified byte (bit 6): 0x{:02x}", modified_vk_bytes[x_last_byte_offset]);
 
     let result = std::panic::catch_unwind(|| {
         verification_key_from_bytes(&modified_vk_bytes)
@@ -1463,17 +1463,17 @@ fn test_bug006_vk_bit6_manipulation() {
 
     match result {
         Ok(_vk) => {
-            println!("BUG-006d: Modified VK (bit 6) was parsed");
+            println!("BC-006d: Modified VK (bit 6) was parsed");
             // Бит 6 в uncompressed format не имеет специального значения,
             // но значение всё ещё может быть >= modulus
         }
         Err(e) => {
-            println!("BUG-006d: Modified VK rejected: {:?}", e);
+            println!("BC-006d: Modified VK rejected: {:?}", e);
         }
     }
 }
 
-/// BUG-006e: Тест на манипуляцию KZG params (g точка)
+/// BC-006e: Тест на манипуляцию KZG params (g точка)
 #[test]
 #[ignore] // Требует kzg_params.bin
 fn test_bug006_kzg_params_bit7_manipulation() {
@@ -1498,7 +1498,7 @@ fn test_bug006_kzg_params_bit7_manipulation() {
 
     if original_params_bytes.len() > g_x_last_byte_offset {
         let original_byte = original_params_bytes[g_x_last_byte_offset];
-        println!("BUG-006e: Original g.x last byte: 0x{:02x}", original_byte);
+        println!("BC-006e: Original g.x last byte: 0x{:02x}", original_byte);
 
         let mut modified_params_bytes = original_params_bytes.clone();
         modified_params_bytes[g_x_last_byte_offset] |= 0x80;
@@ -1515,18 +1515,18 @@ fn test_bug006_kzg_params_bit7_manipulation() {
 
         match result {
             Ok(_params) => {
-                println!("BUG-006e WARNING: Modified KZG params with bit 7 set was parsed!");
+                println!("BC-006e WARNING: Modified KZG params with bit 7 set was parsed!");
             }
             Err(e) => {
-                println!("BUG-006e: Modified KZG params rejected: {:?}", e);
+                println!("BC-006e: Modified KZG params rejected: {:?}", e);
             }
         }
     } else {
-        println!("BUG-006e: KZG params file too short");
+        println!("BC-006e: KZG params file too short");
     }
 }
 
-/// Тест BUG-006: проверяем что мутированный proof отклоняется
+/// Тест BC-006: проверяем что мутированный proof отклоняется
 /// Оригинальный баг: XOR 0x80 на позиции 31 (последний байт первого элемента) принимался
 #[test]
 #[ignore] // Требует proof.bin, kzg_params.bin, verification_key.bin
@@ -1567,7 +1567,7 @@ fn test_bug006_proof_mutation_rejected() {
         Err(_) => println!("Original proof: PANIC"),
     }
 
-    // Тестируем BUG-006: XOR 0x80 на позиции 31
+    // Тестируем BC-006: XOR 0x80 на позиции 31
     let mut mutated_proof = proof.clone();
     mutated_proof[31] ^= 0x80;
 
@@ -1577,7 +1577,7 @@ fn test_bug006_proof_mutation_rejected() {
 
     match &mutated_result {
         Ok(true) => {
-            panic!("BUG-006 REPRODUCED: Mutated proof at pos=31, XOR=0x80 was ACCEPTED!");
+            panic!("BC-006 REPRODUCED: Mutated proof at pos=31, XOR=0x80 was ACCEPTED!");
         }
         Ok(false) => println!("Mutated proof correctly REJECTED"),
         Err(_) => println!("Mutated proof: PANIC (acceptable)"),
@@ -1600,7 +1600,7 @@ fn test_bug006_proof_mutation_rejected() {
 
         match result {
             Ok(true) => {
-                println!("BUG-006: Element {} (pos={}) with XOR 0x80 ACCEPTED!", elem_idx, pos);
+                println!("BC-006: Element {} (pos={}) with XOR 0x80 ACCEPTED!", elem_idx, pos);
                 bugs_found += 1;
             }
             Ok(false) => (), // OK
@@ -1608,7 +1608,7 @@ fn test_bug006_proof_mutation_rejected() {
         }
     }
 
-    assert_eq!(bugs_found, 0, "BUG-006: {} mutations were incorrectly accepted", bugs_found);
+    assert_eq!(bugs_found, 0, "BC-006: {} mutations were incorrectly accepted", bugs_found);
 }
 
 // ============================================================
@@ -2690,7 +2690,7 @@ fn test_gen_03_generator_equals_pk() {
     );
 }
 
-/// GEN-04: g = identity (уже протестировано в BUG-002, здесь для полноты)
+/// GEN-04: g = identity (уже протестировано в BC-002, здесь для полноты)
 #[test]
 fn test_gen_04_generator_identity() {
     use halo2_base::halo2_proofs::halo2curves::secp256k1::{Fq, Secp256k1Affine};
@@ -2708,7 +2708,7 @@ fn test_gen_04_generator_identity() {
     // pk = sk * identity = identity
     let pk = (g * sk).to_affine();
 
-    // Это может вызвать panic (BUG-002) или constraint violation
+    // Это может вызвать panic (BC-002) или constraint violation
     let result = std::panic::catch_unwind(|| {
         crate::helpers::check_circuit_with_mock(sk, pk, g, 1, 1000, sk_raw, 0)
     });
@@ -2722,7 +2722,7 @@ fn test_gen_04_generator_identity() {
             );
         }
         Err(_) => {
-            // Panic - известный BUG-002
+            // Panic - известный BC-002
         }
     }
 }
@@ -2944,7 +2944,7 @@ fn test_mal_03_proof_randomness() {
     assert!(result2.is_valid(), "MAL-03: Второй proof должен верифицироваться");
 }
 
-/// MAL-04: Тест на BUG-006 - мутация 0x80 в последнем байте элемента
+/// MAL-04: Тест на BC-006 - мутация 0x80 в последнем байте элемента
 // ============================================================================
 // SETUP TESTS - Тесты функций инициализации
 // ============================================================================
@@ -3170,9 +3170,9 @@ fn test_mal_04_bug006_high_bit_mutation() {
     }
 
     if !vulnerabilities.is_empty() {
-        eprintln!("MAL-04/BUG-006: Найдены уязвимые позиции: {:?}", vulnerabilities);
+        eprintln!("MAL-04/BC-006: Найдены уязвимые позиции: {:?}", vulnerabilities);
     }
 
-    // Этот тест документирует BUG-006, не assert'ит
+    // Этот тест документирует BC-006, не assert'ит
 }
 

@@ -1,0 +1,149 @@
+# Bug Candidate Tracking - Отслеживание потенциальных проблем
+
+## Быстрый старт
+
+```bash
+# Проверить статус ВСЕХ известных BC:
+cd Pruvendo/tests/property_tests
+cargo test --release -- --nocapture 2>&1 | grep -E "BC-00[0-9]|STATUS:"
+
+# Запустить конкретный тест:
+cargo test test_generator_identity --release -- --nocapture  # BC-002
+cargo test test_corrupted_vk --release -- --ignored --nocapture  # BC-001
+cargo test bc003 --release -- --ignored --nocapture  # BC-003
+cargo test test_corrupted_kzg_params_bytes --release -- --ignored --nocapture  # BC-004/005
+cargo test bc006 --release -- --ignored --nocapture  # BC-006
+```
+
+## Список Bug Candidates (актуальный статус на 2026-01-15)
+
+| ID | Название | Severity | Текущий статус |
+|----|----------|----------|----------------|
+| BC-001 | Panic при corrupted VK bytes (header) | Medium | ⚠️ REPRODUCED |
+| BC-001 | Panic при corrupted VK bytes (middle) | Medium | ✅ NOT CONFIRMED |
+| BC-002 | Panic при g = identity point | Medium | ⚠️ REPRODUCED |
+| BC-003 | shl_overflow при corrupted KZG header | Medium | ⚠️ REPRODUCED |
+| BC-004 | shl_overflow в commitment.rs | Medium | ✅ NOT CONFIRMED |
+| BC-005 | shl_overflow в domain.rs | Medium | Дубликат BC-004 |
+| BC-006 | Non-canonical field elements | Low | ✅ Not a soundness issue |
+| **BC-007** | **deposit_sum коллизии** | **High** | **🔴 FOUND BY FUZZING** |
+
+## Детали каждого Bug Candidate
+
+### BC-001: Panic при corrupted VK bytes
+- **Тесты:** `test_corrupted_vk_bytes_header`, `test_corrupted_vk_bytes_middle`
+- **Воспроизведение:** `cargo test test_corrupted_vk --release -- --ignored --nocapture`
+- **Причина:** halo2curves не обрабатывает gracefully corrupted данные
+- **Рекомендация:** Валидировать VK перед использованием
+
+### BC-002: Panic при g = identity point
+- **Тест:** `test_generator_identity`
+- **Воспроизведение:** `cargo test test_generator_identity --release -- --nocapture`
+- **Причина:** subtle crate не поддерживает identity point в операциях
+- **Рекомендация:** Проверять g != identity на входе
+
+### BC-003: OOM/panic при corrupted KZG header
+- **Тест:** `test_corrupted_kzg_header_bc003`
+- **Воспроизведение:** `cargo test bc003 --release -- --ignored --nocapture`
+- **Причина:** Corrupted size в header приводит к попытке выделить петабайты памяти
+- **Рекомендация:** Валидировать размеры перед аллокацией
+
+### BC-004/BC-005: shl_overflow в halo2_proofs
+- **Тест:** `test_corrupted_kzg_params_bytes`
+- **Воспроизведение:** `cargo test test_corrupted_kzg_params_bytes --release -- --ignored --nocapture`
+- **Причина:** Corrupted данные вызывают overflow при shift операциях
+- **Рекомендация:** Upstream fix или валидация данных
+
+### BC-006: Non-canonical field elements
+- **Тесты:** `test_bc006_vk_bit7_manipulation_*`, `test_bc006_verification_with_modified_vk`
+- **Воспроизведение:** `cargo test bc006 --release -- --ignored --nocapture`
+- **Статус:** NOT a soundness issue - elements are reduced during arithmetic
+- **Рекомендация:** Low priority, informational
+
+### BC-007: deposit_sum collision (HIGH SEVERITY)
+- **Найден:** Overnight fuzzing 15.01.2026
+- **Fuzz targets:** `fuzz_digest_collision`, `fuzz_multikey_digest`
+- **Воспроизведение:**
+  ```bash
+  cargo +nightly fuzz run fuzz_digest_collision --fuzz-dir Pruvendo/fuzz \
+    Pruvendo/fuzz/artifacts/fuzz_digest_collision/crash-bf9dd64e8719cdd48add91072c80230cbe2ad6cb
+  ```
+- **Суть проблемы:**
+  - `deposit_sum = token + sum + vault` (additive formula)
+  - Different `(token, vault)` pairs with the same sum produce identical `deposit_sum`
+  - Example: `(token=91577, vault=691321)` and `(token=93113, vault=689785)` produce same digest
+- **Влияние на безопасность:**
+  - Attacker can create different notes with identical digest
+  - Public data (token, sum) not separated from private (vault)
+- **Рекомендация:** Change formula:
+  ```
+  digest = poseidon_hash([key_sum, token, sum, vault])  // separately
+  ```
+  instead of:
+  ```
+  deposit_sum = token + sum + vault
+  digest = poseidon_hash([key_sum, deposit_sum])
+  ```
+
+## Tracking System
+
+All BC tests use the unified tracking system from `helpers.rs`:
+
+```rust
+use crate::helpers::{known_bugs, report_bug_candidate_status, check_bug_candidate_status};
+
+let status = check_bug_candidate_status(|| {
+    // code that may panic
+    potentially_panicking_code()
+});
+
+report_bug_candidate_status(&known_bugs::BC_XXX, status);
+```
+
+### Statuses:
+- `REPRODUCED` - BC reproduces in current version
+- `FIXED` / `NOT CONFIRMED` - BC no longer reproduces
+- `SKIPPED` - test skipped (files not found)
+
+## How to Add a New Bug Candidate
+
+1. Add `BugCandidateInfo` to `helpers.rs`:
+```rust
+pub const BC_008: BugCandidateInfo = BugCandidateInfo {
+    id: "BC-008",
+    title: "Description of the bug candidate",
+    location: "where it is located",
+    severity: "High/Medium/Low",
+};
+```
+
+2. Create a test in `tests.rs`:
+```rust
+/// BC-008: Brief description
+/// Run: cargo test test_bc008 --release -- --nocapture
+#[test]
+fn test_bc008_description() {
+    use crate::helpers::{known_bugs, report_bug_candidate_status, check_bug_candidate_status};
+
+    let status = check_bug_candidate_status(|| {
+        // code reproducing the bug candidate
+    });
+
+    report_bug_candidate_status(&known_bugs::BC_008, status);
+}
+```
+
+3. Update this documentation
+
+## CI Integration
+
+For CI, run BC tests separately:
+
+```bash
+# Tests that don't require files (always work)
+cargo test test_generator_identity --release
+
+# Tests that require files (ignored by default)
+cargo test --release -- --ignored 2>&1 | grep -E "STATUS:|passed|failed"
+```
+

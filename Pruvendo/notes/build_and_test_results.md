@@ -122,7 +122,7 @@ cargo test --release -- --nocapture
 
 ### Найденные баги
 
-#### 🐛 BUG-001: Panic при парсинге некорректного VK
+#### 🐛 BC-001: Panic при парсинге некорректного VK
 
 **Файл:** `fuzz/artifacts/fuzz_verifier_bytes/crash-c95af1eefbad7ff281b1f94f84ddecc261d055e3`
 
@@ -143,7 +143,7 @@ halo2_proofs::poly::kzg::commitment::ParamsKZG<E>::read_custom
 
 ---
 
-#### 🐛 BUG-002: Panic при g = identity point
+#### 🐛 BC-002: Panic при g = identity point
 
 **Тест:** `test_generator_identity` (X-03)
 

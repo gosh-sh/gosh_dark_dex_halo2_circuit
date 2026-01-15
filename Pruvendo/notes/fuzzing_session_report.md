@@ -13,7 +13,7 @@
 **Обновление 2026-01-14**: Все property-based тесты проходят.
 - **91 passed**, 23 ignored, 0 failed (включая 8 новых SETUP тестов)
 - Время выполнения: ~16.5 минут
-- BUG-006 исследован: **НЕ soundness bug** (randomized proofs работают корректно)
+- BC-006 исследован: **НЕ soundness bug** (randomized proofs работают корректно)
 - 4 бага в upstream библиотеках **ВОСПРОИЗВОДЯТСЯ** (panic при corrupted input)
 
 ## Созданные fuzz targets
@@ -34,7 +34,7 @@
 
 ## Найденные баги - Статус на 2026-01-13
 
-### ~~КРИТИЧЕСКИЙ: BUG-006 - Мутированный proof принимается~~
+### ~~КРИТИЧЕСКИЙ: BC-006 - Мутированный proof принимается~~
 
 **Статус**: ❌ **НЕ ВОСПРОИЗВОДИТСЯ**
 
@@ -46,7 +46,7 @@ crashes не обнаружены. Старые crash-артефакты вып�
 2. Исправлено в обновлённых зависимостях halo2curves/halo2_proofs
 3. Изменение в логике верификации
 
-### BUG-001: Panic при некорректном VK
+### BC-001: Panic при некорректном VK
 
 **Статус**: ⚠️ **ВОСПРОИЗВОДИТСЯ** (upstream)
 
@@ -56,7 +56,7 @@ crashes не обнаружены. Старые crash-артефакты вып�
 
 **Артефакт**: `fuzz/artifacts/fuzz_verifier_bytes/crash-c95af1eefbad7ff281b1f94f84ddecc261d055e3`
 
-### BUG-002: Panic при g = identity point
+### BC-002: Panic при g = identity point
 
 **Статус**: ⚠️ **ВОСПРОИЗВОДИТСЯ** (DarkDex circuit)
 
@@ -71,7 +71,7 @@ cargo test test_generator_identity -- --nocapture
 
 **Описание**: Когда `g = identity point` (точка на бесконечности), схема паникует из-за assertion в библиотеке `subtle`. Это происходит при попытке scalar multiply на identity point.
 
-### BUG-003: ~~OOM~~ → Panic shl_overflow при corrupted KZG header
+### BC-003: ~~OOM~~ → Panic shl_overflow при corrupted KZG header
 
 **Статус**: ⚠️ **ИЗМЕНИЛСЯ** (теперь panic вместо OOM)
 
@@ -86,9 +86,9 @@ cargo test test_corrupted_kzg_header_bug003 -- --ignored --nocapture
 
 **Описание**: Ранее повреждение header KZG params вызывало OOM (попытка выделить петабайты). Теперь вызывает panic `shl_overflow` - это **улучшение**, т.к. panic можно перехватить, а OOM нет.
 
-**Примечание**: Тот же crash что и BUG-004 - одна root cause.
+**Примечание**: Тот же crash что и BC-004 - одна root cause.
 
-### BUG-004: Panic shl_overflow в commitment.rs
+### BC-004: Panic shl_overflow в commitment.rs
 
 **Статус**: ⚠️ **ВОСПРОИЗВОДИТСЯ** (upstream)
 
@@ -97,7 +97,7 @@ cargo test test_corrupted_kzg_header_bug003 -- --ignored --nocapture
 
 **Артефакт**: `fuzz/artifacts/fuzz_verifier_bytes/crash-2ab4e854afaa7c81fc119cdded49ca0d45ad26d6`
 
-### BUG-005: Panic shl_overflow в domain.rs
+### BC-005: Panic shl_overflow в domain.rs
 
 **Статус**: ⚠️ **ВОСПРОИЗВОДИТСЯ** (upstream)
 
@@ -108,7 +108,7 @@ cargo test test_corrupted_kzg_header_bug003 -- --ignored --nocapture
 
 ---
 
-### BUG-006: Анализ мутаций proof (2026-01-13)
+### BC-006: Анализ мутаций proof (2026-01-13)
 
 **Статус**: ✅ **НЕ SOUNDNESS BUG**
 
@@ -137,12 +137,12 @@ cargo test test_corrupted_kzg_header_bug003 -- --ignored --nocapture
 
 | ID | Severity | Статус | Upstream? | Описание |
 |----|----------|--------|-----------|----------|
-| BUG-006 | ~~Critical~~ Low | ✅ Не soundness bug | halo2curves | SerdeFormat::RawBytesUnchecked принимает неканоничные FE, но верификация отклоняет |
-| BUG-005 | Medium | ⚠️ Воспроизводится | halo2_proofs | shl_overflow в domain.rs:44 |
-| BUG-004 | Medium | ⚠️ Воспроизводится | halo2_proofs | shl_overflow в commitment.rs:205 |
-| BUG-003 | ~~High~~ | ✅ Дубликат BUG-004 | halo2_proofs | ~~OOM~~ → теперь panic shl_overflow (та же root cause) |
-| BUG-002 | Medium | ⚠️ Воспроизводится | subtle | Panic assertion при g = identity point |
-| BUG-001 | Medium | ⚠️ Воспроизводится | halo2curves | unwrap на Err при corrupted VK |
+| BC-006 | ~~Critical~~ Low | ✅ Не soundness bug | halo2curves | SerdeFormat::RawBytesUnchecked принимает неканоничные FE, но верификация отклоняет |
+| BC-005 | Medium | ⚠️ Воспроизводится | halo2_proofs | shl_overflow в domain.rs:44 |
+| BC-004 | Medium | ⚠️ Воспроизводится | halo2_proofs | shl_overflow в commitment.rs:205 |
+| BC-003 | ~~High~~ | ✅ Дубликат BC-004 | halo2_proofs | ~~OOM~~ → теперь panic shl_overflow (та же root cause) |
+| BC-002 | Medium | ⚠️ Воспроизводится | subtle | Panic assertion при g = identity point |
+| BC-001 | Medium | ⚠️ Воспроизводится | halo2curves | unwrap на Err при corrupted VK |
 
 ## Статистика тестирования 2026-01-13
 
@@ -160,11 +160,11 @@ cargo test test_corrupted_kzg_header_bug003 -- --ignored --nocapture
 ## Рекомендации
 
 ### Высокий приоритет
-1. ✅ BUG-006 подтверждён как НЕ soundness bug
-2. Сообщить о BUG-004, BUG-005 в репозиторий scroll-tech/halo2
+1. ✅ BC-006 подтверждён как НЕ soundness bug
+2. Сообщить о BC-004, BC-005 в репозиторий scroll-tech/halo2
 
 ### Средний приоритет
-3. Сообщить о BUG-001 в репозиторий scroll-tech/halo2curves
+3. Сообщить о BC-001 в репозиторий scroll-tech/halo2curves
 4. Добавить валидацию входных данных перед десериализацией
 
 ### Низкий приоритет
@@ -263,7 +263,7 @@ cargo test test_corrupted_kzg_header_bug003 -- --ignored --nocapture
 
 2. **Все soundness тесты проходят**: Мутации в proof, VK, public inputs корректно отклоняются.
 
-3. **Upstream баги**: 4 panic при corrupted input в halo2_proofs/halo2curves (BUG-001, 002, 004, 005).
+3. **Upstream баги**: 4 panic при corrupted input в halo2_proofs/halo2curves (BC-001, 002, 004, 005).
 
 ---
 
@@ -296,7 +296,7 @@ cargo test test_corrupted_kzg_header_bug003 -- --ignored --nocapture
 
 | Функция | Тесты |
 |---------|-------|
-| `verification_key_from_bytes()` | SER-*, BUG-006 tests |
+| `verification_key_from_bytes()` | SER-*, BC-006 tests |
 | `verification_key_from_path()` | SETUP-06 + all verify tests |
 | `verify_proof_()` | All proof verification tests |
 
