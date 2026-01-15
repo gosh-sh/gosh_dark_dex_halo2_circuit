@@ -209,6 +209,7 @@ dependencies = [
  "poseidon-base",
  "proptest",
  "rand 0.8.5",
+ "tempfile",
 ]
 
 [[package]]

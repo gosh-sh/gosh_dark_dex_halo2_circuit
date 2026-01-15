@@ -7,6 +7,22 @@
 - **Code and comments must be in English**
 - **Notes and reports may be in Russian unless otherwise specified**
 
+## Plan-First Principle
+
+**IMPORTANT: Always follow the plan!**
+
+Before starting any work:
+1. **Check if a plan exists** - look for `Pruvendo/docs/TESTING_PLAN.md` or similar
+2. **Review current priorities** - check task list and plan status
+3. **If plan is outdated** - update the plan FIRST, then work according to updated plan
+4. **Never work without a plan** - if no plan exists, create one before starting
+
+This ensures:
+- Consistent progress tracking
+- No duplicate or forgotten work
+- Clear communication with stakeholders
+- Reproducible audit process
+
 ## Project Structure
 
 - `src/` - Main source code (READ-ONLY)

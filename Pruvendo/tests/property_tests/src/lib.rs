@@ -21,3 +21,20 @@ mod fpchip_audit;
 #[cfg(test)]
 mod integration_tests;
 
+#[cfg(test)]
+mod prover_tests;
+
+#[cfg(test)]
+mod verifier_tests;
+
+#[cfg(test)]
+mod kzg_tests;
+
+#[cfg(test)]
+mod keygen_tests;
+
+#[cfg(test)]
+mod serialization_tests;
+
+#[cfg(test)]
+mod params_tests;

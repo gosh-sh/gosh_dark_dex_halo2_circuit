@@ -308,3 +308,24 @@ path = "fuzz_targets/fuzz_limb_overflow_attack.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_prover_error_paths"
+path = "fuzz_targets/fuzz_prover_error_paths.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_verifier_negative"
+path = "fuzz_targets/fuzz_verifier_negative.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_proof_malleability"
+path = "fuzz_targets/fuzz_proof_malleability.rs"
+test = false
+doc = false
+bench = false

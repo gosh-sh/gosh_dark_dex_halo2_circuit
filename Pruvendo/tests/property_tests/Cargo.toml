@@ -25,6 +25,7 @@ rand = "0.8"
 
 [dev-dependencies]
 proptest = "1.4"
+tempfile = "3.24.0"
 
 [patch.crates-io]
 halo2curves = { git = "https://github.com/scroll-tech/halo2curves", branch = "v0.1.0" }
