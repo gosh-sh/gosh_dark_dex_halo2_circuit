@@ -1,15 +1,168 @@
 # План тестирования Dark DEX Halo2 Circuit
 
-**Версия:** 2.0
-**Обновлено:** 2025-12-25
+**Версия:** 3.0
+**Обновлено:** 2026-01-15
 
-## 1. Обзор
+---
 
-Данный документ описывает комплексный план тестирования ZK-схемы Dark DEX на базе Halo2, включая продвинутые методы: фаззинг, property-based testing и формальную верификацию с использованием SMT солверов.
+## Текущий статус
 
-## 2. Существующие тесты
+| Метрика | Значение |
+|---------|----------|
+| Fuzz Targets | 39 |
+| Property Tests | 156+ |
+| Integration Tests | 13 |
+| Bug Candidates | 7 (BC-001 to BC-007) |
 
-В проекте реализованы следующие тесты (`src/test.rs`):
+**Подробный статус покрытия**: см. [COVERAGE_STATUS.md](./COVERAGE_STATUS.md)
+
+---
+
+## ПРИОРИТЕТНЫЙ ПЛАН (v3.0)
+
+### Приоритеты
+- **P1 (High)**: 🟡 Желтые зоны - частично покрыты
+- **P2 (Medium)**: 🔴 Красные зоны - не покрыты вообще
+- **P3 (Low)**: Дополнительные улучшения
+
+---
+
+## P1: Желтые зоны (требуют доработки)
+
+### 1.1 Prover Error Paths ⬜
+**Файл**: `src/prover.rs`
+
+| Что тестировать | Fuzz | Prop |
+|-----------------|------|------|
+| generate_proof с невалидными параметрами | ⬜ | ⬜ |
+| keygen_vk/keygen_pk с некорректной схемой | ⬜ | ⬜ |
+| Error handling при недостаточных ресурсах | ⬜ | ⬜ |
+
+**Deliverables**:
+- `Pruvendo/tests/property_tests/src/prover_tests.rs`
+- `Pruvendo/fuzz/fuzz_targets/fuzz_prover_error_paths.rs`
+
+---
+
+### 1.2 Verifier Negative Tests ⬜
+**Файл**: `src/verifier.rs`
+
+| Что тестировать | Fuzz | Prop |
+|-----------------|------|------|
+| verify_proof_ с malformed proof bytes | ⬜ | ⬜ |
+| verify_proof_ с неправильными public inputs | ⬜ | ⬜ |
+| verification_key_from_bytes с corrupted VK | ⬜ | ⬜ |
+| verification_key_from_path с несуществующим файлом | ⬜ | ⬜ |
+
+**Deliverables**:
+- `Pruvendo/tests/property_tests/src/verifier_tests.rs`
+- `Pruvendo/fuzz/fuzz_targets/fuzz_verifier_negative.rs`
+
+---
+
+### 1.3 Non-malleability Extension ⬜
+
+| Что тестировать | Fuzz | Prop |
+|-----------------|------|------|
+| Proof mutation (bit flips, truncation) | ⬜ | ⬜ |
+| Transcript manipulation | ⬜ | ⬜ |
+| Public input permutation | ⬜ | ⬜ |
+
+**Deliverables**:
+- `Pruvendo/fuzz/fuzz_targets/fuzz_proof_malleability.rs`
+
+---
+
+### 1.4 KZG Integration Tests ⬜
+
+| Что тестировать | Fuzz | Prop |
+|-----------------|------|------|
+| Params размер vs k | ⬜ | ⬜ |
+| Commitment consistency | ⬜ | ⬜ |
+| Pairing check smoke tests | ⬜ | ⬜ |
+
+**Deliverables**:
+- `Pruvendo/tests/property_tests/src/kzg_tests.rs`
+
+---
+
+## P2: Красные зоны (не покрыты)
+
+### 2.1 VK/PK Generation Tests ⬜
+**Файл**: `src/prover.rs`
+
+| Что тестировать | Fuzz | Prop |
+|-----------------|------|------|
+| VK детерминизм (same circuit → same VK) | ⬜ | ⬜ |
+| PK детерминизм | ⬜ | ⬜ |
+| VK/PK consistency | ⬜ | ⬜ |
+| VK size bounds | ⬜ | ⬜ |
+
+**Deliverables**:
+- `Pruvendo/tests/property_tests/src/keygen_tests.rs`
+- `Pruvendo/fuzz/fuzz_targets/fuzz_keygen.rs`
+
+---
+
+### 2.2 Serialization Tests ⬜
+**Файлы**: `src/prover.rs`, `src/verifier.rs`
+
+| Что тестировать | Fuzz | Prop |
+|-----------------|------|------|
+| VK write → read roundtrip | ⬜ | ⬜ |
+| KZG Params write → read roundtrip | ⬜ | ⬜ |
+| Corrupted bytes handling | ⬜ | ⬜ |
+| Version compatibility | ⬜ | ⬜ |
+
+**Deliverables**:
+- `Pruvendo/tests/property_tests/src/serialization_tests.rs`
+- `Pruvendo/fuzz/fuzz_targets/fuzz_serialization.rs`
+
+---
+
+### 2.3 KZG Params Setup Tests ⬜
+**Файл**: `src/prover.rs`
+
+| Что тестировать | Fuzz | Prop |
+|-----------------|------|------|
+| Params генерация детерминизм | ⬜ | ⬜ |
+| Params size для разных k | ⬜ | ⬜ |
+| read_kzg_params с corrupted данными | ⬜ | ⬜ |
+
+**Deliverables**:
+- `Pruvendo/tests/property_tests/src/params_tests.rs`
+- `Pruvendo/fuzz/fuzz_targets/fuzz_params.rs`
+
+---
+
+## Ожидаемые результаты
+
+После выполнения P1+P2:
+- **Fuzz Targets**: 39 → ~47 (+8)
+- **Property Tests**: 156 → ~200 (+44)
+- **Все зоны**: 🟢 (полностью покрыты)
+
+---
+
+## Архив: ранее выполненные задачи
+
+### ✅ Фаза 1: Базовое расширение (ЗАВЕРШЕНО)
+- [x] Property-based тесты (156+ тестов)
+- [x] Fuzz targets (39 targets)
+- [x] Integration tests (13 тестов)
+
+### ✅ Фаза 2: Аудит компонентов (ЗАВЕРШЕНО)
+- [x] Poseidon audit (17 тестов)
+- [x] FpChip audit (14 тестов)
+- [x] Bug candidates tracking (BC-001 to BC-007)
+
+---
+
+# ===============================================
+# АРХИВНЫЙ РАЗДЕЛ (старая версия плана)
+# ===============================================
+
+## Существующие тесты (из src/test.rs)
 
 | Тест | Описание | Статус |
 |------|----------|--------|
@@ -20,7 +173,7 @@
 | `full_test_with_backuped_params` | Полный тест с сохраненными параметрами | ✅ PASSED |
 | `full_test` | End-to-end тест | ✅ PASSED |
 
-## 3. План тестирования
+## Архивный план тестирования
 
 ### 3.1 Unit-тесты (модульные)
 
