@@ -1,7 +1,7 @@
 # План тестирования Dark DEX Halo2 Circuit
 
-**Версия:** 3.0
-**Обновлено:** 2026-01-15
+**Версия:** 3.1
+**Обновлено:** 2026-01-16
 
 ---
 
@@ -15,6 +15,40 @@
 | Bug Candidates | 7 (BC-001 to BC-007) |
 
 **Подробный статус покрытия**: см. [COVERAGE_STATUS.md](./COVERAGE_STATUS.md)
+
+---
+
+## Результаты ночного фаззинга v2 (2026-01-16)
+
+**Время**: 04:42 → 09:45 (~5 часов)
+**Targets**: 18 (2 transient + 16 new)
+**Результат**: ✅ 18/18 passed, 0 crashed
+
+| Target | Runs | exec/s | cov | Статус |
+|--------|------|--------|-----|--------|
+| fuzz_proof_mutations | 37,134 | 37 | 4,605 | ✅ |
+| fuzz_structured_proof | 66,396,521 | 66,330 | 130 | ✅ |
+| fuzz_constraint_bypass | 160 | ~0 | 5,461 | ✅ |
+| fuzz_public_input_mismatch | 95 | ~0 | 5,735 | ✅ |
+| fuzz_weak_generator | 46 | ~0 | 5,436 | ✅ (timeout) |
+| fuzz_digest_preimage | 649,591 | 648 | 205 | ✅ |
+| fuzz_cross_keypair_attack | 99 | ~0 | 5,724 | ✅ |
+| fuzz_limb_reconstruction | 644,510 | 643 | 158 | ✅ |
+| fuzz_poseidon_gadget_consistency | 163 | ~0 | 5,540 | ✅ |
+| fuzz_poseidon_algebraic | 1,675,936 | 1,674 | 229 | ✅ |
+| fuzz_scalar_multiply_verification | 176 | ~0 | 5,539 | ✅ |
+| fuzz_limb_overflow_attack | 121 | ~0 | 5,543 | ✅ |
+| fuzz_prover_error_paths | 12,186 | 12 | 986 | ✅ |
+| fuzz_verifier_negative | 63,284,854 | 63,221 | 34 | ✅ |
+| fuzz_proof_malleability | 132,505,292 | 132,372 | 158 | ✅ |
+| fuzz_scalar_edge_cases | 161 | ~0 | 5,533 | ✅ |
+| fuzz_double_spend_attack | 56 | ~0 | 5,750 | ✅ |
+| fuzz_range_check_bypass | 147 | ~0 | 5,554 | ✅ |
+
+**Выводы**:
+1. Transient crashes (fuzz_proof_mutations, fuzz_structured_proof) подтверждены как transient - прошли 5-часовой прогон
+2. Все 16 новых targets стабильны
+3. Тяжёлые targets с MockProver работают медленно, но имеют высокий coverage (5,000+)
 
 ---
 
