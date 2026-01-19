@@ -217,3 +217,33 @@ path = "fuzz_targets/fuzz_proof_malleability.rs"
 test = false
 doc = false
 bench = false
+
+# New targets for poseidon_instead_of_ecc architecture
+
+[[bin]]
+name = "fuzz_commitment_binding"
+path = "fuzz_targets/fuzz_commitment_binding.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_digest_binding"
+path = "fuzz_targets/fuzz_digest_binding.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_sk_hiding"
+path = "fuzz_targets/fuzz_sk_hiding.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_zero_padding_security"
+path = "fuzz_targets/fuzz_zero_padding_security.rs"
+test = false
+doc = false
+bench = false
