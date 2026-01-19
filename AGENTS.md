@@ -1,5 +1,15 @@
 # AGENTS.md - Project Rules
 
+## Role Definition
+
+**We are security auditors, NOT developers.**
+
+This means:
+- We **find and document** bugs/vulnerabilities, we do NOT fix them
+- Fixes are the responsibility of the project developers
+- Our deliverables are: tests, bug candidate reports, coverage analysis
+- We do NOT modify the main project source code (`src/`, `config/`)
+
 ## General Rules
 
 - **DO NOT modify files in the main project** - all original source files are read-only
