@@ -1,8 +1,9 @@
 # План тестирования Dark DEX Halo2 Circuit
 
-**Версия:** 5.0
-**Обновлено:** 2026-01-19
+**Версия:** 6.0
+**Обновлено:** 2026-01-20
 **Архитектура:** poseidon_instead_of_ecc
+**Best Practices:** см. [ZK_AUDIT_BEST_PRACTICES.md](./ZK_AUDIT_BEST_PRACTICES.md)
 
 ---
 
@@ -10,7 +11,7 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Fuzz Targets | 26 (все адаптированы) |
+| Fuzz Targets | 33 (26 stable + 4 P1 + 3 P0) |
 | Property Tests | 116 |
 | Integration Tests | 13 |
 | Bug Candidates | 4 open, 3 closed |
@@ -109,9 +110,73 @@
 
 ---
 
-## Следующие шаги
+## Приоритетные задачи (на основе Best Practices)
 
-- [ ] Overnight fuzzing на новой архитектуре (26 targets)
-- [ ] Анализ новых потенциальных уязвимостей
-- [ ] Документирование закрытых BC
+### P0: Критично (96% багов!)
+
+> **Under-constrained circuits вызывают 96% багов в ZK системах**
+
+| Задача | Приоритет | Статус | Описание |
+|--------|-----------|--------|----------|
+| fuzz_unused_public_inputs | P0 | ✅ | Проверка что все public inputs используются |
+| fuzz_witness_unconstrained | P0 | ✅ | Assigned but not constrained |
+| fuzz_copy_constraint_violation | P0 | ✅ | Missing equality constraints |
+
+### P1: Высокий
+
+| Задача | Приоритет | Статус | Описание |
+|--------|-----------|--------|----------|
+| fuzz_commitment_binding | P1 | ✅ | sk_commitment binding |
+| fuzz_digest_binding | P1 | ✅ | 4-input digest binding |
+| fuzz_sk_hiding | P1 | ✅ | sk cannot be recovered |
+| fuzz_zero_padding_security | P1 | ✅ | Zero padding security |
+
+### P2: Средний
+
+| Задача | Приоритет | Статус | Описание |
+|--------|-----------|--------|----------|
+| Overnight fuzzing (30 targets) | P2 | ⏳ | Ночной прогон всех новых таргетов |
+| Документирование закрытых BC | P2 | ⏳ | BC-002, BC-004, BC-007 |
+
+---
+
+## Покрытие по Best Practices
+
+| Уязвимость | Покрытие | Тесты |
+|------------|----------|-------|
+| Under-constrained (96% багов) | ✅ | soundness, witness_manipulation + P0 |
+| Over-constrained | ✅ | completeness |
+| Arithmetic overflow | ✅ | field_wrap, edge_cases |
+| Nondeterministic | ✅ | determinism |
+| Unused public inputs | ✅ | fuzz_unused_public_inputs |
+| Fiat-Shamir (Frozen Heart) | N/A | Halo2 handles internally |
+| Assigned not constrained | ✅ | fuzz_witness_unconstrained |
+| Copy constraints | ✅ | fuzz_copy_constraint_violation |
+| Lookup tables | N/A | Не используются в схеме |
+| Poseidon security | ✅ | poseidon_*, digest_*, commitment_* |
+
+---
+
+## New Fuzz Targets (7)
+
+### P1: Poseidon Architecture (новые)
+- fuzz_commitment_binding ✅
+- fuzz_digest_binding ✅
+- fuzz_sk_hiding ✅
+- fuzz_zero_padding_security ✅
+
+### P0: Critical Security (best practices)
+- fuzz_unused_public_inputs ✅
+- fuzz_copy_constraint_violation ✅
+- fuzz_witness_unconstrained ✅
+
+---
+
+## Скрипты
+
+| Скрипт | Назначение |
+|--------|------------|
+| `run_new_targets.sh` | Ночной прогон НОВЫХ targets (4 шт) |
+| `check_known_bc.sh` | Проверка известных BC |
+| `quick_smoke_test.sh` | Smoke test (5s каждый) |
 

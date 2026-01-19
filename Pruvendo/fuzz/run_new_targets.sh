@@ -16,11 +16,18 @@ FUZZ_DIR="Pruvendo/fuzz"
 TIME_PER_TARGET=${1:-600}  # Default 10 min, can override: ./run_new_targets.sh 1800
 
 # NEW targets (poseidon_instead_of_ecc specific, not yet fuzzed overnight)
+# P1: Architecture-specific
+# P0: Best practices security (critical)
 NEW_TARGETS=(
+    # P1 targets
     fuzz_commitment_binding
     fuzz_digest_binding
     fuzz_sk_hiding
     fuzz_zero_padding_security
+    # P0 targets (critical security)
+    fuzz_unused_public_inputs
+    fuzz_copy_constraint_violation
+    fuzz_witness_unconstrained
 )
 
 echo "=== Overnight Fuzzing: NEW Targets ===" | tee "$LOG_FILE"
