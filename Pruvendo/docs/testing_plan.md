@@ -1,7 +1,8 @@
 # План тестирования Dark DEX Halo2 Circuit
 
-**Версия:** 4.0
-**Обновлено:** 2026-01-16
+**Версия:** 5.0
+**Обновлено:** 2026-01-19
+**Архитектура:** poseidon_instead_of_ecc
 
 ---
 
@@ -9,67 +10,50 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Fuzz Targets | 42 (38 stable, 4 known BC) |
-| Property Tests | 198 |
+| Fuzz Targets | 26 (все адаптированы) |
+| Property Tests | 116 |
 | Integration Tests | 13 |
-| Bug Candidates | 7 (BC-001 to BC-007) |
-| Overnight Coverage | 38 targets × 5h = ✅ 0 crashes |
+| Bug Candidates | 4 open, 3 closed |
+| Overnight Coverage | Pending (новая архитектура) |
 
 **Подробный статус**: см. [COVERAGE_STATUS.md](./COVERAGE_STATUS.md)
 
 ---
 
-## Выполненные задачи
+## Архитектура (poseidon_instead_of_ecc)
 
-### ✅ Фаза 1: Базовое покрытие
+```
+Старая (ECC):
+- pk = sk * G (EC multiplication)
+- key_data_sum = sk + Σ(pk.x limbs) + Σ(pk.y limbs)
+- deposit_sum = private_note_sum + token_type + vault_rand_val
+- digest = poseidon([key_data_sum, deposit_sum])
+- k = 18, params ~33MB
 
-| Задача | Deliverables | Тесты |
-|--------|--------------|-------|
-| Property-based тесты | `tests.rs` | 112 |
-| Fuzz targets (core) | 26 fuzz targets | — |
-| Integration tests | `integration_tests.rs` | 13 |
-
-### ✅ Фаза 2: Аудит компонентов
-
-| Задача | Deliverables | Тесты |
-|--------|--------------|-------|
-| Poseidon audit | `poseidon_audit.rs` | 15 |
-| FpChip audit | `fpchip_audit.rs` | 14 |
-| Bug candidates | BC-001 to BC-007 | — |
-
-### ✅ Фаза 3: P1 (желтые зоны)
-
-| Задача | Deliverables | Тесты |
-|--------|--------------|-------|
-| Prover error paths | `prover_tests.rs`, fuzz | 8 |
-| Verifier negative | `verifier_tests.rs`, fuzz | 10 |
-| Non-malleability | `fuzz_proof_malleability` | — |
-| KZG integration | `kzg_tests.rs` | 7 |
-
-### ✅ Фаза 4: P2 (красные зоны)
-
-| Задача | Deliverables | Тесты |
-|--------|--------------|-------|
-| VK/PK generation | `keygen_tests.rs` | 4 |
-| Serialization | `serialization_tests.rs` | 6 |
-| KZG params setup | `params_tests.rs` | 7 |
-
-### ✅ Фаза 5: Overnight fuzzing
-
-| Дата | Targets | Время | Результат |
-|------|---------|-------|-----------|
-| 2026-01-15 | 26 | 6h | 10 crashes → 4 BC, 2 transient |
-| 2026-01-16 | 18 | 5h | 0 crashes ✅ |
+Новая (Poseidon only):
+- sk_commitment = poseidon([sk, 0])
+- digest = poseidon([sk_commitment, private_note_sum, token_type, sk])
+- Public inputs: [private_note_sum, token_type, digest]
+- k = 8, params ~33KB
+```
 
 ---
 
-## P3: Низкий приоритет (не выполнено)
+## Выполненные задачи
 
-| Задача | Причина |
-|--------|---------|
-| bn256 Pairing tests | Внешняя библиотека (halo2-lib) |
-| Performance benchmarks | Не критично для аудита |
-| SMT/Z3 verification | halo2-analyzer несовместим |
+### ✅ Фаза 1-5: Базовое покрытие (ECC версия)
+
+Все задачи выполнены на ECC версии, затем адаптированы.
+
+### ✅ Фаза 6: Миграция на poseidon_instead_of_ecc
+
+| Задача | Статус |
+|--------|--------|
+| Merge poseidon_instead_of_ecc | ✅ Выполнено |
+| Адаптация property tests | ✅ 116 тестов |
+| Адаптация fuzz targets | ✅ 26 targets |
+| Удаление ECC targets | ✅ 16 удалено |
+| Обновление BC статусов | ✅ 3 закрыты |
 
 ---
 
@@ -78,28 +62,56 @@
 | ID | Описание | Severity | Статус |
 |----|----------|----------|--------|
 | BC-001 | halo2curves panic on short input | Medium | Upstream |
-| BC-002 | deposit_sum collision (theoretical) | Info | Expected |
-| BC-003 | key_sum collision (theoretical) | Info | Expected |
-| BC-004 | Limb overflow > Fr modulus | Info | Covered |
-| BC-005 | halo2_proofs panic on malformed VK | Medium | Upstream |
-| BC-006 | Poseidon preimage (computational) | Info | Expected |
-| BC-007 | deposit_sum collision (not exploitable) | Low | Documented |
+| BC-002 | g = identity point | — | **CLOSED** (no g) |
+| BC-003 | shl_overflow in KZG header | Medium | Upstream |
+| BC-004 | Limb overflow > Fr modulus | — | **CLOSED** (no limbs) |
+| BC-005 | shl_overflow in domain.rs | Medium | Upstream |
+| BC-006 | Non-canonical field elements | Low | Upstream |
+| BC-007 | deposit_sum collision | — | **CLOSED** (formula changed) |
 
 ---
 
-## Fuzz Scripts
+## Fuzz Targets (26)
 
-| Script | Targets | Назначение |
-|--------|---------|------------|
-| `run_overnight_stable_v2.sh` | 38 | Все стабильные targets |
-| `run_overnight_known_crashes.sh` | 4 | Известные BC |
+### Core (10)
+- fuzz_completeness
+- fuzz_determinism
+- fuzz_soundness
+- fuzz_soundness_extended
+- fuzz_edge_cases
+- fuzz_field_wrap
+- fuzz_sum_binding
+- fuzz_token_binding
+- fuzz_proof_replay
+- fuzz_public_input_mismatch
+
+### Poseidon (6)
+- fuzz_poseidon_consistency
+- fuzz_poseidon_algebraic
+- fuzz_poseidon_gadget_consistency
+- fuzz_poseidon_preimage
+- fuzz_digest_collision
+- fuzz_digest_preimage
+
+### Attack Simulation (4)
+- fuzz_double_spend_attack
+- fuzz_multikey_digest
+- fuzz_witness_manipulation
+- fuzz_proof_malleability
+
+### Serialization (6)
+- fuzz_proof_mutations
+- fuzz_structured_proof
+- fuzz_verifier_bytes
+- fuzz_verifier_negative
+- fuzz_proving_key_bytes
+- fuzz_prover_error_paths
 
 ---
 
 ## Следующие шаги
 
-- [ ] Merge `poseidon_instead_of_ecc` branch
-- [ ] Адаптировать тесты под новую архитектуру
-- [ ] Проверить какие BC закрылись
-- [ ] Overnight run на новой версии
+- [ ] Overnight fuzzing на новой архитектуре (26 targets)
+- [ ] Анализ новых потенциальных уязвимостей
+- [ ] Документирование закрытых BC
 

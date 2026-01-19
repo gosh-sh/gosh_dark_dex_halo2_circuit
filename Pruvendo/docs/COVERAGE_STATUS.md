@@ -1,13 +1,15 @@
 # DarkDex Protocol Test Coverage Status
 
-**Дата**: 2026-01-16
-**Версия**: 2.0
+**Дата**: 2026-01-19
+**Версия**: 3.0
+**Архитектура**: poseidon_instead_of_ecc
 
 ## Легенда
 
 - 🟢 **Хорошо покрыто** - есть fuzz targets + property tests
 - 🟡 **Частично покрыто** - есть базовые тесты, внешние зависимости
 - 🔴 **Не покрыто** - нет специфических тестов
+- ⚫ **Не применимо** - удалено в новой архитектуре
 
 ---
 
@@ -15,20 +17,21 @@
 
 | Компонент | Статус | Fuzz | Props | Примечание |
 |-----------|--------|------|-------|------------|
-| DarkDexCircuit synthesize | 🟢 | 15+ | 50+ | Soundness, completeness |
-| scalar_multiply (pk=sk*g) | 🟢 | 3 | 14 | FpChip audit |
-| poseidon_hash_gadget | 🟢 | 6 | 17 | Poseidon audit |
-| FpChip (limb decomposition) | 🟢 | 4 | 14 | FpChip audit |
+| DarkDexCircuit synthesize | 🟢 | 10+ | 30+ | Soundness, completeness |
+| sk_commitment = poseidon(sk, 0) | 🟢 | 6 | 10+ | Новая архитектура |
+| poseidon_hash_gadget | 🟢 | 6 | 15+ | Poseidon audit |
 | Public Input Constraints | 🟢 | 3 | 10+ | Integration tests |
+| ~~scalar_multiply (pk=sk*g)~~ | ⚫ | — | — | Удалено |
+| ~~FpChip (limb decomposition)~~ | ⚫ | — | — | Удалено |
 
 ## 2. Cryptographic Primitives
 
 | Компонент | Статус | Fuzz | Props | Примечание |
 |-----------|--------|------|-------|------------|
-| Poseidon Hash | 🟢 | 6 | 17 | Полный аудит |
-| secp256k1 EC operations | 🟢 | 5 | 10+ | Point validation |
+| Poseidon Hash | 🟢 | 6 | 15+ | Полный аудит |
 | bn256 Pairing | 🟡 | 0 | 0 | halo2-lib dependency (P3) |
 | KZG Commitment | 🟢 | 1 | 7 | kzg_tests.rs |
+| ~~secp256k1 EC operations~~ | ⚫ | — | — | Удалено |
 
 ## 3. Proof System
 
@@ -44,25 +47,25 @@
 
 | Свойство | Статус | Fuzz | Props | Примечание |
 |----------|--------|------|-------|------------|
-| Soundness | 🟢 | 3 | 20+ | Полное покрытие |
-| Completeness | 🟢 | 1 | 15+ | Полное покрытие |
-| Replay Protection | 🟢 | 2 | 2 | Integration tests |
-| Collision Resistance | 🟢 | 3 | 5+ | BC-007 documented |
+| Soundness | 🟢 | 2 | 15+ | Полное покрытие |
+| Completeness | 🟢 | 1 | 10+ | Полное покрытие |
+| Replay Protection | 🟢 | 1 | 2 | Integration tests |
+| Collision Resistance | 🟢 | 2 | 5+ | Poseidon-based |
 | Non-malleability | 🟢 | 2 | 2 | fuzz_proof_malleability |
-| Binding properties | 🟢 | 4 | 4+ | Vault, token, sum |
+| Binding properties | 🟢 | 2 | 4+ | Token, sum |
 
 ## 5. Attack Vectors
 
 | Атака | Статус | Fuzz | Props | Примечание |
 |-------|--------|------|-------|------------|
-| Keypair swap | 🟢 | 2 | 2 | cross_keypair_attack |
 | Digest preimage | 🟢 | 2 | 1 | Покрыто |
-| Limb overflow | 🟢 | 3 | 5+ | limb_overflow_attack |
-| Range check bypass | 🟢 | 1 | 2 | Покрыто |
 | Double spend | 🟢 | 1 | 1 | Покрыто |
-| Weak generator | 🟢 | 1 | 1 | Покрыто |
 | Field wrap | 🟢 | 1 | 2 | Покрыто |
-| Constraint bypass | 🟢 | 1 | 2 | fuzz_constraint_bypass |
+| Witness manipulation | 🟢 | 1 | 2 | Покрыто |
+| Multikey digest | 🟢 | 1 | 1 | Покрыто |
+| ~~Keypair swap~~ | ⚫ | — | — | Удалено (нет pk) |
+| ~~Limb overflow~~ | ⚫ | — | — | Удалено (нет limbs) |
+| ~~Weak generator~~ | ⚫ | — | — | Удалено (нет g) |
 
 ---
 
@@ -70,24 +73,24 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Fuzz Targets | 42 |
-| Property Tests | 198 |
+| Fuzz Targets | 26 |
+| Property Tests | 116 |
 | Integration Tests | 13 |
-| Stable Overnight Runs | 38 targets |
-| Bug Candidates | 7 (BC-001 to BC-007) |
+| Bug Candidates | 4 open, 3 closed |
 
 ---
 
-## Ночной фаззинг (2026-01-16)
+## Bug Candidates
 
-- **Время**: ~5 часов
-- **Targets**: 38 stable
-- **Результат**: 0 crashes
-
-Лучшие по пропускной способности:
-- fuzz_proof_malleability: 132M runs
-- fuzz_verifier_negative: 63M runs
-- fuzz_structured_proof: 66M runs
+| ID | Статус | Описание |
+|----|--------|----------|
+| BC-001 | Open | halo2curves panic on short input (upstream) |
+| BC-002 | **CLOSED** | g = identity (нет g в новой архитектуре) |
+| BC-003 | Open | shl_overflow in KZG header (upstream) |
+| BC-004 | **CLOSED** | Limb overflow (нет limbs в новой архитектуре) |
+| BC-005 | Open | shl_overflow in domain.rs (upstream) |
+| BC-006 | Open | Non-canonical field elements (upstream) |
+| BC-007 | **CLOSED** | deposit_sum collision (формула изменена) |
 
 ---
 
@@ -103,7 +106,6 @@
 
 ## См. также
 
-- [POSEIDON_AUDIT_REPORT.md](./POSEIDON_AUDIT_REPORT.md)
-- [FPCHIP_AUDIT_REPORT.md](./FPCHIP_AUDIT_REPORT.md)
+- [TESTING_PLAN.md](./TESTING_PLAN.md)
 - [BUG_CANDIDATES.md](./BUG_CANDIDATES.md)
 
