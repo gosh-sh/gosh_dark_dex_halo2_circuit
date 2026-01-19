@@ -28,8 +28,9 @@ fuzz_target!(|input: DeterminismInput| {
         return;
     }
 
-    let token = input.token_type % 1_000_000;
-    let sum = input.note_sum % 1_000_000_000;
+    // Используем полный диапазон u64 для лучшего покрытия
+    let token = input.token_type;
+    let sum = input.note_sum;
 
     // Первый запуск
     let result1 = check_circuit(input.sk_seed, token, sum);

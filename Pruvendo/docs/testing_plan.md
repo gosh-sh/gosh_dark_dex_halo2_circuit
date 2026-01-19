@@ -176,7 +176,59 @@
 
 | Скрипт | Назначение |
 |--------|------------|
-| `run_new_targets.sh` | Ночной прогон НОВЫХ targets (4 шт) |
+| `run_new_targets.sh` | Ночной прогон НОВЫХ targets (7 шт) |
 | `check_known_bc.sh` | Проверка известных BC |
 | `quick_smoke_test.sh` | Smoke test (5s каждый) |
+
+---
+
+## Аудит качества тестов (2026-01-19)
+
+### Выявленные проблемы
+
+| Приоритет | Проблема | Файлы | Статус |
+|-----------|----------|-------|--------|
+| 🔴 P0 | Узкий диапазон фаззинга (`% 1_000_000`) | 6 файлов | ✅ Исправлено |
+| 🔴 P0 | `fuzz_proof_malleability` не тестирует реальный proof | 1 файл | ✅ Исправлено |
+| 🔴 P0 | `fuzz_sum_binding`/`fuzz_token_binding` не тестируют soundness | 2 файла | ✅ Исправлено |
+| 🟡 P1 | Тавтологии (тест использует ту же формулу что и circuit) | 4 файла | ⏳ |
+| 🟡 P1 | Дублирование тестов | 4 группы | ⏳ |
+
+### Выполненные исправления (2026-01-19)
+
+#### ✅ Этап 1: Расширение диапазонов фаззинга (P0)
+
+Исправленные файлы:
+- `fuzz_soundness.rs` - убраны `% 1_000_000` ограничения, полный u64 диапазон
+- `fuzz_completeness.rs` - аналогично
+- `fuzz_determinism.rs` - аналогично
+- `fuzz_sum_binding.rs` - аналогично
+- `fuzz_token_binding.rs` - аналогично
+
+#### ✅ Этап 2: Исправление fuzz_sum_binding / fuzz_token_binding (P0)
+
+Теперь тесты проверяют:
+- Completeness (valid accepted): правильные значения принимаются
+- Soundness (wrong rejected): неправильные значения отклоняются
+
+#### ✅ Этап 3: Переписан fuzz_proof_malleability (P0)
+
+Новая реализация тестирует реальные атаки:
+- WrongCommitment: commitment от другого sk
+- SwapPublicInputs: перестановка public inputs
+- MutateDigest: изменение digest
+- WrongSk: неправильный sk
+- WrongToken: неправильный token
+- WrongSum: неправильная sum
+
+Использует реальный MockProver вместо fake proof.
+
+### Pending исправления
+
+#### ⏳ Этап 4: Добавить reference implementation (P1)
+
+Проблема: compute_digest/poseidon_hash используются и в тестах и в circuit
+Решение: Добавить независимую Poseidon реализацию для cross-validation
+
+---
 

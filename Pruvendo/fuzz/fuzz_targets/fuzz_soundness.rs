@@ -40,9 +40,9 @@ fuzz_target!(|input: SoundnessInput| {
         return;
     }
 
-    // Ограничиваем значения
-    let token = input.token_type % 1_000_000;
-    let sum = input.note_sum % 1_000_000_000;
+    // Используем полный диапазон u64 для лучшего покрытия
+    let token = input.token_type;
+    let sum = input.note_sum;
 
     let sk = Fr::from(input.sk_seed);
     let wrong_sk = Fr::from(input.wrong_sk_seed);

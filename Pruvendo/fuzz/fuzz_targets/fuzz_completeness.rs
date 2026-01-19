@@ -33,9 +33,9 @@ fuzz_target!(|input: CompletenessInput| {
         return;
     }
 
-    // Ограничиваем значения
-    let token = input.token_type % 1_000_000;
-    let sum = input.note_sum % 1_000_000_000;
+    // Используем полный диапазон u64 для лучшего покрытия
+    let token = input.token_type;
+    let sum = input.note_sum;
 
     // Проверяем схему с валидными входами
     let result = check_circuit(input.sk_seed, token, sum);
