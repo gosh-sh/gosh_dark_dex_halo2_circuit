@@ -1,5 +1,7 @@
 //! Fuzz target: Determinism property
 //!
+//! Версия: poseidon_instead_of_ecc
+//!
 //! Проверяет что схема детерминирована: одинаковые входы → одинаковый результат.
 //! Запускает схему дважды с теми же параметрами и сравнивает результаты.
 //!
@@ -11,7 +13,7 @@ mod common;
 
 use libfuzzer_sys::fuzz_target;
 use arbitrary::Arbitrary;
-use common::{generate_valid_keypair, check_circuit};
+use common::check_circuit;
 
 /// Входные данные для fuzzing
 #[derive(Arbitrary, Debug)]
@@ -19,7 +21,6 @@ struct DeterminismInput {
     sk_seed: u64,
     token_type: u64,
     note_sum: u64,
-    vault_rand_val: u64,
 }
 
 fuzz_target!(|input: DeterminismInput| {
@@ -29,15 +30,12 @@ fuzz_target!(|input: DeterminismInput| {
 
     let token = input.token_type % 1_000_000;
     let sum = input.note_sum % 1_000_000_000;
-    let vault = input.vault_rand_val % 1_000_000;
-
-    let (sk, pk, g) = generate_valid_keypair(input.sk_seed);
 
     // Первый запуск
-    let result1 = check_circuit(sk, pk, g, token, sum, vault, input.sk_seed);
+    let result1 = check_circuit(input.sk_seed, token, sum);
 
     // Второй запуск с теми же параметрами
-    let result2 = check_circuit(sk, pk, g, token, sum, vault, input.sk_seed);
+    let result2 = check_circuit(input.sk_seed, token, sum);
 
     // ASSERTION: результаты должны совпадать
     assert_eq!(

@@ -1,5 +1,7 @@
 //! P1.3: Fuzz Proof Malleability
 //!
+//! Версия: poseidon_instead_of_ecc
+//!
 //! Tests proof mutation attacks:
 //! - Bit flips in proof bytes
 //! - Truncation attacks
@@ -12,10 +14,10 @@ use libfuzzer_sys::fuzz_target;
 use arbitrary::Arbitrary;
 
 use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
-use halo2_base::halo2_proofs::halo2curves::secp256k1::{Fq, Secp256k1Affine};
-use halo2_base::halo2_proofs::halo2curves::group::Curve;
-use halo2_proofs::dev::MockProver;
 use gosh_dark_dex_halo2_circuit::circuit::DarkDexCircuit;
+
+mod common;
+use common::compute_sk_commitment;
 
 #[derive(Arbitrary, Debug)]
 enum MutationType {
@@ -32,35 +34,31 @@ struct FuzzInput {
     sk_val: u64,
     token: u64,
     sum: u64,
-    vault: u64,
     // Mutation to apply
     mutation: MutationType,
 }
 
-fn generate_valid_circuit(sk_val: u64, token: u64, sum: u64, vault: u64) 
-    -> (DarkDexCircuit, Vec<Fr>) 
+#[allow(dead_code)]
+fn generate_valid_circuit(sk_val: u64, token: u64, sum: u64)
+    -> (DarkDexCircuit, Vec<Fr>)
 {
     let sk_val = if sk_val == 0 { 1 } else { sk_val };
-    let sk = Fq::from(sk_val);
-    let g = Secp256k1Affine::generator();
-    let pk = (g * sk).to_affine();
-    
+    let sk = Fr::from(sk_val);
+    let sk_commitment = compute_sk_commitment(sk);
+
     let token_fr = Fr::from(token);
     let sum_fr = Fr::from(sum);
-    let vault_fr = Fr::from(vault);
-    
+
     let circuit = DarkDexCircuit::new(
         Some(token_fr),
         Some(sum_fr),
-        Some(vault_fr),
         Some(sk),
-        Some(pk),
-        Some(g),
+        Some(sk_commitment),
     );
-    
+
     // Compute expected public inputs
     let pub_inputs = vec![sum_fr, token_fr, Fr::from(0u64)]; // placeholder digest
-    
+
     (circuit, pub_inputs)
 }
 

@@ -1,4 +1,6 @@
-//! EXT-01: Fuzz target для проверки consistency Poseidon hash
+//! Fuzz target: Poseidon Hash Consistency
+//!
+//! Версия: poseidon_instead_of_ecc
 //!
 //! Проверяет что poseidon_hash() детерминистичен:
 //! hash(a, b) == hash(a, b) для любых a, b

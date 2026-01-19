@@ -1,7 +1,9 @@
-//! Fuzz target: Extended soundness testing
+//! Fuzz target: Extended Soundness Testing
 //!
-//! Расширенная проверка soundness: проверяет что неверный pk отклоняется.
-//! После poseidon_integration: soundness проверяется через digest.
+//! Версия: poseidon_instead_of_ecc
+//!
+//! Расширенная проверка soundness: проверяет что неверный sk_commitment отклоняется.
+//! Soundness проверяется через digest.
 //!
 //! Находит: нарушения soundness при неверных ключах.
 //!
@@ -11,6 +13,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use arbitrary::Arbitrary;
+use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 
 mod common;
 use common::*;
@@ -20,14 +23,12 @@ use common::*;
 struct ExtendedSoundnessInput {
     /// Seed для sk
     sk_seed: u64,
-    /// Seed для wrong_sk
+    /// Seed для wrong_sk (для wrong_commitment)
     wrong_sk_seed: u64,
     /// Token type
     token: u64,
     /// Sum
     sum: u64,
-    /// Vault random value
-    vault: u64,
 }
 
 fuzz_target!(|input: ExtendedSoundnessInput| {
@@ -36,32 +37,30 @@ fuzz_target!(|input: ExtendedSoundnessInput| {
         return;
     }
     if input.sk_seed == input.wrong_sk_seed {
-        return; // pk будет верным
+        return; // commitment будет верным
     }
+
+    ensure_working_directory();
 
     let token = input.token % 1_000_000;
     let sum = input.sum % 1_000_000_000;
-    let vault = input.vault % 1_000_000;
 
-    // Генерируем неверную пару: pk ≠ sk * G
-    let (sk, wrong_pk, g) = generate_invalid_keypair(input.sk_seed, input.wrong_sk_seed);
+    // Вычисляем wrong_commitment от другого sk
+    let wrong_sk = Fr::from(input.wrong_sk_seed);
+    let wrong_commitment = compute_sk_commitment(wrong_sk);
 
-    // Проверяем схему с неверным pk
-    // Используем wrong_sk_seed для digest чтобы digest соответствовал wrong_pk
-    let result = check_circuit(
-        sk,
-        wrong_pk,  // НЕВЕРНЫЙ публичный ключ!
-        g,
+    // Проверяем схему с неверным sk_commitment
+    let result = check_circuit_with_wrong_commitment(
+        Fr::from(input.sk_seed),
+        wrong_commitment,  // НЕВЕРНЫЙ sk_commitment!
         token,
         sum,
-        vault,
-        input.wrong_sk_seed,  // sk_raw для digest - консистентен с wrong_pk
     );
 
-    // ASSERTION: неверный pk ДОЛЖЕН быть отклонён
+    // ASSERTION: неверный sk_commitment ДОЛЖЕН быть отклонён
     assert!(
         result.is_err(),
-        "SOUNDNESS VIOLATION! Wrong pk was accepted!\n\
+        "SOUNDNESS VIOLATION! Wrong sk_commitment was accepted!\n\
          sk={}, wrong_sk={}\n\
          token={}, sum={}",
         input.sk_seed, input.wrong_sk_seed,

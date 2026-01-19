@@ -1,29 +1,20 @@
 //! P1.1: Prover Error Paths Tests
 //!
+//! Версия: poseidon_instead_of_ecc
+//!
 //! Tests for error handling in prover.rs:
 //! - generate_proof with invalid parameters
 //! - keygen_vk / keygen_pk edge cases
 //! - Error handling behavior
 
 use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
-use halo2_base::halo2_proofs::halo2curves::secp256k1::{Fq, Secp256k1Affine};
-use halo2_base::halo2_proofs::halo2curves::group::Curve;
-use halo2_base::halo2_proofs::arithmetic::CurveAffine;
 use halo2_proofs::poly::kzg::commitment::ParamsKZG;
+use halo2_proofs::poly::commitment::Params;
 use halo2_proofs::halo2curves::bn256::Bn256;
 use gosh_dark_dex_halo2_circuit::prover::*;
 use proptest::prelude::*;
 
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-fn generate_valid_keypair(sk_val: u64) -> (Fq, Secp256k1Affine, Secp256k1Affine) {
-    let sk = Fq::from(sk_val);
-    let g = Secp256k1Affine::generator();
-    let pk = (g * sk).to_affine();
-    (sk, pk, g)
-}
+use crate::helpers::compute_sk_commitment;
 
 // =============================================================================
 // Setup Tests
@@ -33,22 +24,21 @@ fn generate_valid_keypair(sk_val: u64) -> (Fq, Secp256k1Affine, Secp256k1Affine)
 fn test_setup_k_minimum() {
     // k=1 should work (very small circuit)
     let params = setup(1);
-    assert!(params.k == 1);
+    assert!(params.k() == 1);
 }
 
 #[test]
 fn test_setup_k_standard() {
-    // k=4 is a reasonable small value for testing
-    let params = setup(4);
-    assert!(params.k == 4);
+    // k=8 is the standard for new poseidon-only DarkDex
+    let params = setup(8);
+    assert!(params.k() == 8);
 }
 
 #[test]
-#[ignore] // Takes too long and uses too much memory
-fn test_setup_k_large() {
-    // k=18 is the standard for DarkDex
-    let params = setup(18);
-    assert!(params.k == 18);
+fn test_setup_k_larger() {
+    // k=10 for larger circuits
+    let params = setup(10);
+    assert!(params.k() == 10);
 }
 
 // =============================================================================
@@ -58,32 +48,34 @@ fn test_setup_k_large() {
 #[test]
 fn test_generate_vk_without_witness_small_k() {
     // Test VK generation with small k (should fail or succeed depending on circuit size)
-    let params = setup(4);
+    // Новая архитектура: k=8 минимум для схемы
+    let params = setup(6);
     // This may panic if k is too small for the circuit
     let result = std::panic::catch_unwind(|| {
         generate_verififcation_key_without_witness(&params)
     });
     // Document whether it panics or succeeds
     if result.is_err() {
-        println!("VK generation with k=4 panics (expected - circuit too large)");
+        println!("VK generation with k=6 panics (expected - circuit too large)");
     } else {
-        println!("VK generation with k=4 succeeded");
+        println!("VK generation with k=6 succeeded");
     }
 }
 
 #[test]
 fn test_vk_determinism() {
     // Same circuit should produce same VK
-    let params = setup(6);
-    
+    // Новая архитектура: k=8 достаточно для схемы
+    let params = setup(8);
+
     let result1 = std::panic::catch_unwind(|| {
         generate_verififcation_key_without_witness(&params)
     });
-    
+
     let result2 = std::panic::catch_unwind(|| {
         generate_verififcation_key_without_witness(&params)
     });
-    
+
     match (result1, result2) {
         (Ok(vk1), Ok(vk2)) => {
             // VKs should be identical
@@ -106,12 +98,13 @@ fn test_vk_determinism() {
 #[test]
 fn test_generate_proof_key_with_none_values() {
     // Test with all None values (default circuit)
-    let params = setup(6);
-    
+    // Новая архитектура: k=8 достаточно для схемы
+    let params = setup(8);
+
     let result = std::panic::catch_unwind(|| {
-        generate_proof_key(&params, None, None, None, None, None, None)
+        generate_proof_key(&params, None, None, None, None)
     });
-    
+
     // Document behavior
     if result.is_ok() {
         println!("PK generation with None values succeeded");
@@ -122,21 +115,21 @@ fn test_generate_proof_key_with_none_values() {
 
 #[test]
 fn test_generate_proof_key_with_valid_values() {
-    let params = setup(6);
-    let (sk, pk, g) = generate_valid_keypair(12345);
-    
+    // Новая архитектура: k=8 достаточно для схемы
+    let params = setup(8);
+    let sk = Fr::from(12345u64);
+    let sk_commitment = compute_sk_commitment(sk);
+
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         generate_proof_key(
             &params,
-            Some(Fr::from(1u64)),
-            Some(Fr::from(1000u64)),
-            Some(Fr::from(100u64)),
-            Some(sk),
-            Some(pk),
-            Some(g),
+            Some(Fr::from(1u64)),        // token_type
+            Some(Fr::from(1000u64)),     // private_note_sum
+            Some(sk),                     // sk_u
+            Some(sk_commitment),          // sk_u_commitment
         )
     }));
-    
+
     if result.is_ok() {
         println!("PK generation with valid values succeeded");
     } else {

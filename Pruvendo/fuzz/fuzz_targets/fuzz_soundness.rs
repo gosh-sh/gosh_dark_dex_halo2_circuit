@@ -1,7 +1,9 @@
 //! Fuzz target: Soundness property
 //!
-//! Проверяет что схема ОТКЛОНЯЕТ неверные пары ключей.
-//! Если pk ≠ sk * G, то verify() должен вернуть ошибку.
+//! Версия: poseidon_instead_of_ecc
+//!
+//! Проверяет что схема ОТКЛОНЯЕТ неверные sk_commitment.
+//! Если sk_commitment ≠ poseidon(sk, 0), то verify() должен вернуть ошибку.
 //!
 //! КРИТИЧЕСКИЙ БАГ если этот fuzz target находит нарушение!
 
@@ -11,21 +13,20 @@ mod common;
 
 use libfuzzer_sys::fuzz_target;
 use arbitrary::Arbitrary;
-use common::{generate_invalid_keypair, check_circuit};
+use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
+use common::{compute_sk_commitment, check_circuit_with_wrong_commitment};
 
 /// Входные данные для fuzzing
 #[derive(Arbitrary, Debug)]
 struct SoundnessInput {
     /// Seed для секретного ключа
     sk_seed: u64,
-    /// Seed для НЕВЕРНОГО публичного ключа (pk = wrong_sk * G)
+    /// Seed для НЕВЕРНОГО commitment (от другого sk)
     wrong_sk_seed: u64,
     /// Тип токена
     token_type: u64,
     /// Сумма
     note_sum: u64,
-    /// Vault random value
-    vault_rand_val: u64,
 }
 
 fuzz_target!(|input: SoundnessInput| {
@@ -34,34 +35,31 @@ fuzz_target!(|input: SoundnessInput| {
         return;
     }
 
-    // Если sk == wrong_sk, то pk будет верным — пропускаем
+    // Если sk == wrong_sk, то commitment будет верным — пропускаем
     if input.sk_seed == input.wrong_sk_seed {
         return;
     }
 
-    // Ограничиваем значения чтобы избежать overflow
+    // Ограничиваем значения
     let token = input.token_type % 1_000_000;
     let sum = input.note_sum % 1_000_000_000;
-    let vault = input.vault_rand_val % 1_000_000;
 
-    // Генерируем неверную пару: pk ≠ sk * G
-    let (sk, wrong_pk, g) = generate_invalid_keypair(input.sk_seed, input.wrong_sk_seed);
+    let sk = Fr::from(input.sk_seed);
+    let wrong_sk = Fr::from(input.wrong_sk_seed);
+    let wrong_commitment = compute_sk_commitment(wrong_sk);
 
-    // Проверяем схему - используем wrong_sk_seed для digest (неверный pk)
-    let result = check_circuit(
+    // Проверяем схему с неверным commitment
+    let result = check_circuit_with_wrong_commitment(
         sk,
-        wrong_pk,  // НЕВЕРНЫЙ публичный ключ!
-        g,
+        wrong_commitment,  // НЕВЕРНЫЙ commitment!
         token,
         sum,
-        vault,
-        input.wrong_sk_seed,  // sk_raw для digest - используем wrong чтобы digest был консистентен с wrong_pk
     );
 
-    // ASSERTION: неверная пара ключей ДОЛЖНА быть отклонена
+    // ASSERTION: неверный commitment ДОЛЖЕН быть отклонён
     assert!(
         result.is_err(),
-        "SOUNDNESS VIOLATION! Invalid keypair was accepted!\n\
+        "SOUNDNESS VIOLATION! Wrong commitment was accepted!\n\
          sk_seed = {}, wrong_sk_seed = {}\n\
          token = {}, sum = {}",
         input.sk_seed, input.wrong_sk_seed, token, sum

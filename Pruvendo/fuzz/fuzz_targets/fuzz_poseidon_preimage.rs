@@ -1,4 +1,6 @@
-//! Fuzz target: POS-01 - Poseidon preimage soundness
+//! Fuzz target: POS-01 - Poseidon Preimage Soundness
+//!
+//! Версия: poseidon_instead_of_ecc
 //!
 //! Проверяет что нельзя подобрать другие inputs дающие тот же digest.
 //! Если inputs изменились, то верификация должна провалиться даже с тем же digest.
@@ -11,21 +13,20 @@ mod common;
 
 use libfuzzer_sys::fuzz_target;
 use arbitrary::Arbitrary;
-use common::{generate_valid_keypair, check_circuit_with_custom_digest};
+use common::{check_circuit_with_custom_digest, compute_digest};
+use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 
 /// Входные данные для fuzzing
 #[derive(Arbitrary, Debug)]
 struct PoseidonPreimageInput {
-    /// Seed для keypair
+    /// Seed для sk
     sk_seed: u64,
     /// Оригинальные значения
     original_token: u64,
     original_sum: u64,
-    original_vault: u64,
     /// Модифицированные значения (пытаемся подделать)
     modified_token: u64,
     modified_sum: u64,
-    modified_vault: u64,
 }
 
 fuzz_target!(|input: PoseidonPreimageInput| {
@@ -37,43 +38,37 @@ fuzz_target!(|input: PoseidonPreimageInput| {
     // Ограничиваем значения
     let orig_token = input.original_token % 1_000_000;
     let orig_sum = input.original_sum % 1_000_000_000;
-    let orig_vault = input.original_vault % 1_000_000;
 
     let mod_token = input.modified_token % 1_000_000;
     let mod_sum = input.modified_sum % 1_000_000_000;
-    let mod_vault = input.modified_vault % 1_000_000;
 
     // Если значения не изменились - пропускаем (это валидный случай)
-    if orig_token == mod_token && orig_sum == mod_sum && orig_vault == mod_vault {
+    if orig_token == mod_token && orig_sum == mod_sum {
         return;
     }
 
-    // Генерируем валидную пару ключей
-    let (sk, pk, g) = generate_valid_keypair(input.sk_seed);
+    let sk = Fr::from(input.sk_seed);
 
     // Вычисляем digest с ОРИГИНАЛЬНЫМИ значениями
-    // Но пытаемся пройти верификацию с МОДИФИЦИРОВАННЫМИ значениями
+    let original_digest = compute_digest(sk, Fr::from(orig_token), Fr::from(orig_sum));
+
+    // Пытаемся пройти верификацию с МОДИФИЦИРОВАННЫМИ значениями
+    // но с digest от оригинальных
     let result = check_circuit_with_custom_digest(
         sk,
-        pk,
-        g,
         mod_token,      // Модифицированный token в circuit
-        mod_sum,        // Модифицированная sum в circuit  
-        mod_vault,      // Модифицированный vault в circuit
-        input.sk_seed,
-        orig_token,     // Но digest вычислен для оригинальных значений!
-        orig_sum,
-        orig_vault,
+        mod_sum,        // Модифицированная sum в circuit
+        original_digest, // Но digest вычислен для оригинальных значений!
     );
 
     // ASSERTION: модифицированные inputs с чужим digest ДОЛЖНЫ быть отклонены
     assert!(
         result.is_err(),
         "POSEIDON PREIMAGE ATTACK! Modified inputs accepted with original digest!\n\
-         Original: token={}, sum={}, vault={}\n\
-         Modified: token={}, sum={}, vault={}",
-        orig_token, orig_sum, orig_vault,
-        mod_token, mod_sum, mod_vault
+         Original: token={}, sum={}\n\
+         Modified: token={}, sum={}",
+        orig_token, orig_sum,
+        mod_token, mod_sum
     );
 });
 

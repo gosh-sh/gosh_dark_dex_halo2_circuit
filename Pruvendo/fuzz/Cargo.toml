@@ -117,29 +117,8 @@ doc = false
 bench = false
 
 [[bin]]
-name = "fuzz_vault_rand_binding"
-path = "fuzz_targets/fuzz_vault_rand_binding.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "fuzz_poseidon_consistency"
 path = "fuzz_targets/fuzz_poseidon_consistency.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_ec_invalid_points"
-path = "fuzz_targets/fuzz_ec_invalid_points.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_ec_coordinate_manipulation"
-path = "fuzz_targets/fuzz_ec_coordinate_manipulation.rs"
 test = false
 doc = false
 bench = false
@@ -152,43 +131,8 @@ doc = false
 bench = false
 
 [[bin]]
-name = "fuzz_vault_zero_binding"
-path = "fuzz_targets/fuzz_vault_zero_binding.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_limb_overflow"
-path = "fuzz_targets/fuzz_limb_overflow.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "fuzz_proof_replay"
 path = "fuzz_targets/fuzz_proof_replay.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_key_sum_collision"
-path = "fuzz_targets/fuzz_key_sum_collision.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_deposit_sum_collision"
-path = "fuzz_targets/fuzz_deposit_sum_collision.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_negated_y"
-path = "fuzz_targets/fuzz_negated_y.rs"
 test = false
 doc = false
 bench = false
@@ -217,22 +161,8 @@ bench = false
 # === NEW DEEP FUZZING TARGETS (2026-01-15) ===
 
 [[bin]]
-name = "fuzz_constraint_bypass"
-path = "fuzz_targets/fuzz_constraint_bypass.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "fuzz_public_input_mismatch"
 path = "fuzz_targets/fuzz_public_input_mismatch.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_weak_generator"
-path = "fuzz_targets/fuzz_weak_generator.rs"
 test = false
 doc = false
 bench = false
@@ -244,39 +174,11 @@ test = false
 doc = false
 bench = false
 
-[[bin]]
-name = "fuzz_cross_keypair_attack"
-path = "fuzz_targets/fuzz_cross_keypair_attack.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_limb_reconstruction"
-path = "fuzz_targets/fuzz_limb_reconstruction.rs"
-test = false
-doc = false
-bench = false
-
 # === NEW FUZZ TARGETS (2026-01-15 evening) ===
-
-[[bin]]
-name = "fuzz_scalar_edge_cases"
-path = "fuzz_targets/fuzz_scalar_edge_cases.rs"
-test = false
-doc = false
-bench = false
 
 [[bin]]
 name = "fuzz_double_spend_attack"
 path = "fuzz_targets/fuzz_double_spend_attack.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_range_check_bypass"
-path = "fuzz_targets/fuzz_range_check_bypass.rs"
 test = false
 doc = false
 bench = false
@@ -291,20 +193,6 @@ bench = false
 [[bin]]
 name = "fuzz_poseidon_gadget_consistency"
 path = "fuzz_targets/fuzz_poseidon_gadget_consistency.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_scalar_multiply_verification"
-path = "fuzz_targets/fuzz_scalar_multiply_verification.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_limb_overflow_attack"
-path = "fuzz_targets/fuzz_limb_overflow_attack.rs"
 test = false
 doc = false
 bench = false
