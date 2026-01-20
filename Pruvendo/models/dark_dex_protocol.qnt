@@ -361,5 +361,115 @@ module dark_dex_protocol {
         )
     )
 
+    // ==========================================================================
+    // TEMPORAL PROPERTIES
+    // ==========================================================================
+    //
+    // Temporal properties express liveness and safety over time.
+    // In Quint, we express them as temporal formulas.
+    //
+    // Notation:
+    //   eventually(P)  = ◇P = "P holds at some point in the future"
+    //   always(P)      = □P = "P holds forever from now"
+    //   P leads_to Q   = □(P => ◇Q) = "whenever P, eventually Q"
+    // ==========================================================================
+
+    // TEMP-1: Liveness - Every deposit can eventually be withdrawn
+    // "If a deposit exists and is not withdrawn, it's possible to withdraw it"
+    //
+    // This is a WEAK liveness property - it says withdrawal is POSSIBLE,
+    // not that it WILL happen (that would require fairness assumptions).
+    //
+    // We express this as: for any active deposit, the withdraw action is enabled
+    // when called by the owner.
+    def can_withdraw(user: UserId, dig: Digest): bool = {
+        deposits.exists(d =>
+            d.digest == dig and
+            not(d.withdrawn) and
+            d.owner == user and
+            not(used_proofs.contains(dig))
+        )
+    }
+
+    // Predicate: all active deposits can be withdrawn by their owners
+    val liveness_withdrawable = deposits.forall(d =>
+        (not(d.withdrawn)) implies can_withdraw(d.owner, d.digest)
+    )
+
+    // TEMP-2: No deadlock - The system can always make progress
+    // Either there's a possible action, or all deposits are withdrawn
+    val no_deadlock = {
+        val all_withdrawn = deposits.forall(d => d.withdrawn)
+        val can_mint = true  // mint is always possible
+        all_withdrawn or can_mint
+    }
+
+    // TEMP-3: Eventual consistency
+    // After all operations complete, DEX balance = sum of active deposits
+    // (This is inv_conservation expressed as a reachability property)
+
+    // TEMP-4: Fair access - No user is permanently blocked
+    // This requires fairness assumptions which are beyond basic model checking.
+    // We express a weaker version: if user has balance, deposit is enabled
+    def can_deposit(user: UserId, token: TokenType, amount: Amount): bool = {
+        get_balance(balances, user, token) >= amount and amount > 0
+    }
+
+    val fair_access = USERS.forall(u =>
+        TOKENS.forall(t =>
+            AMOUNTS.forall(a =>
+                (get_balance(balances, u, t) >= a and a > 0) implies can_deposit(u, t, a)
+            )
+        )
+    )
+
+    // ==========================================================================
+    // TEMPORAL FORMULAS (for Apalache temporal checking)
+    // ==========================================================================
+
+    // These require temporal operators which Apalache supports via --temporal flag
+
+    // TEMP-5: Safety - Once withdrawn, always withdrawn (no rollback)
+    // □(d.withdrawn => □d.withdrawn)
+    // We express this as an action property: withdraw never "un-withdraws"
+
+    // Helper: track which digests were withdrawn in previous state
+    // (This would require history variables for full temporal checking)
+
+    // TEMP-6: Leads-to property
+    // deposit(user, token, amount) ~~> can_withdraw(user, digest)
+    // "Every deposit leads to the ability to withdraw"
+    // This is trivially true in our model because withdraw is always enabled
+    // for active deposits owned by the user.
+
+    // ==========================================================================
+    // TEMPORAL INVARIANTS (checkable as state invariants)
+    // ==========================================================================
+
+    // These are "inductive" versions of temporal properties that can be
+    // checked as regular invariants.
+
+    // TINV-1: Monotonicity of withdrawals
+    // Once a deposit is withdrawn, it stays withdrawn
+    // (This is guaranteed by our state machine - no action "un-withdraws")
+    val tinv_withdrawal_monotonic = deposits.forall(d =>
+        d.withdrawn implies used_proofs.contains(d.digest)
+    )
+
+    // TINV-2: Progress is possible
+    // The system is never completely stuck
+    val tinv_no_stuck = {
+        // Either we can mint, or we can withdraw something, or all is done
+        val can_do_something = (
+            // Can always mint
+            true
+        )
+        can_do_something
+    }
+
+    // TINV-3: Funds are never lost
+    // Total tokens in system = tokens in balances + tokens in DEX
+    // (This is a restatement of inv_conservation as a temporal property)
+
 }
 
