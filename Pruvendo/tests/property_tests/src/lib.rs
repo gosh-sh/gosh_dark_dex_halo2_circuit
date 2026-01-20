@@ -38,3 +38,6 @@ mod serialization_tests;
 
 #[cfg(test)]
 mod params_tests;
+
+#[cfg(test)]
+mod timing_tests;
