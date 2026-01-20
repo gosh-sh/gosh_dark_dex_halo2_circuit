@@ -50,7 +50,7 @@ cargo test test_corrupted_kzg_params_bytes --release -- --ignored --nocapture  #
 cargo test bc006 --release -- --ignored --nocapture  # BC-006
 ```
 
-## Список Bug Candidates (актуальный статус на 2026-01-15)
+## Список Bug Candidates (актуальный статус на 2026-01-21)
 
 | ID | Название | Severity | Текущий статус |
 |----|----------|----------|----------------|
@@ -62,6 +62,7 @@ cargo test bc006 --release -- --ignored --nocapture  # BC-006
 | BC-005 | shl_overflow в domain.rs | Medium | Дубликат BC-004 |
 | BC-006 | Non-canonical field elements | Low | ✅ Not a soundness issue |
 | BC-007 | deposit_sum коллизии | Low | ✅ Not exploitable |
+| ~~BC-008~~ | ~~Split с одинаковыми amounts~~ | ~~Low~~ | ❌ NOT A BUG (model artifact) |
 
 ## Детали каждого Bug Candidate
 
@@ -117,6 +118,23 @@ cargo test bc006 --release -- --ignored --nocapture  # BC-006
   ```
   digest = poseidon_hash([key_sum, token, sum, vault])  // hash separately
   ```
+
+### ~~BC-008~~: Split с одинаковыми amounts (NOT A BUG)
+- **Найден:** Model checking 21.01.2026
+- **Первоначально:** В упрощённой Quint модели `split(100, 100)` создавал одну ноту вместо двух
+- **Причина модельного артефакта:**
+  - Модель использовала `Digest = {owner, token, amount}` без nonce
+  - Два депозита с одинаковыми параметрами имели одинаковый digest
+  - `Set.union({dig_1}).union({dig_2})` при `dig_1 == dig_2` → только один элемент
+- **Почему НЕ баг в реальном протоколе:**
+  - В реальном коде: `sk = random::<u64>()` генерируется для КАЖДОГО депозита
+  - `digest = Poseidon(sk_commitment, amount, token, sk)` — sk уникален!
+  - Два депозита с одинаковыми (owner, amount, token) имеют **РАЗНЫЕ** digests
+- **Решение:** Обновлена модель v3 — добавлено поле `nonce` в тип Digest
+- **Статус:** ❌ NOT A BUG — артефакт упрощённой модели
+- **Верификация после исправления модели:**
+  - Quint random simulation: ✅ PASS
+  - Apalache bounded model checking: ✅ PASS
 
 ## Tracking System
 
