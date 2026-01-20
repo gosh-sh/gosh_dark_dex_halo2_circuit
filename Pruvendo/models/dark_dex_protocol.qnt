@@ -864,5 +864,25 @@ module dark_dex_apalache {
         d.withdrawn implies used_proofs.contains(d.digest)
     )
 
+    // INV-5: Each digest is unique (collision resistance)
+    val inv_unique_digests_aux = deposits.forall(d1 =>
+        deposits.forall(d2 => (d1.digest == d2.digest) implies (d1 == d2))
+    )
+
+    // INV-6: Used proofs are subset of all digests
+    val inv_used_proofs_valid = used_proofs.forall(dig =>
+        deposits.exists(d => d.digest == dig)
+    )
+
+    // INV-7: No active deposit has been used for proof (no double-spend possible)
+    val inv_active_not_used = deposits.forall(d =>
+        not(d.withdrawn) implies not(used_proofs.contains(d.digest))
+    )
+
+    // INV-8: Withdrawn deposits are in used_proofs
+    val inv_withdrawn_tracked = deposits.forall(d =>
+        d.withdrawn implies used_proofs.contains(d.digest)
+    )
+
 }
 
