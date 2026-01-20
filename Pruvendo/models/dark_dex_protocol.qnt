@@ -181,6 +181,7 @@ module dark_dex_protocol {
     }
 
     // WITHDRAW: User выводит токены из DEX (with replay protection)
+    // NOTE: Выводится ВСЯ сумма digest. Для частичного вывода используй split.
     action withdraw(user: UserId, dig: Digest): bool = {
         val dep = find_active_deposit(deposits, dig)
         val updated_dep: Deposit = { ...dep, withdrawn: true }
@@ -192,6 +193,135 @@ module dark_dex_protocol {
             deposits' = deposits.exclude(Set(dep)).union(Set(updated_dep)),
             balances' = set_balance(balances, user, dep.token, cur_bal + dep.amount),
             dex_balances' = set_dex_balance(dex_balances, dep.token, get_dex_balance(dex_balances, dep.token) - dep.amount),
+            op_count' = op_count + 1,
+            used_proofs' = used_proofs.union(Set(dig)),
+            pending_withdraws' = pending_withdraws,
+            timestamp' = timestamp + 1
+        }
+    }
+
+    // ==========================================================================
+    // NOTE OPERATIONS (Contract Layer)
+    // ==========================================================================
+    // Эти операции будут на уровне смарт-контрактов.
+    // ZK circuit только доказывает владение sk → право на операцию.
+    // Сама логика (split, merge, transfer) - в контракте.
+
+    // SPLIT: Разбить ноту на две части
+    // Input: digest_old (amount = a1 + a2)
+    // Output: digest_new_1 (amount = a1), digest_new_2 (amount = a2)
+    // User доказывает владение digest_old через ZK proof
+    action split(user: UserId, dig: Digest, amount_1: Amount, amount_2: Amount): bool = {
+        val dep = find_active_deposit(deposits, dig)
+        val updated_dep: Deposit = { ...dep, withdrawn: true }
+        // Новые digests с новыми amounts (но тот же owner и token)
+        val dig_1 = compute_digest(user, dep.token, amount_1)
+        val dig_2 = compute_digest(user, dep.token, amount_2)
+        val new_dep_1: Deposit = {
+            digest: dig_1,
+            amount: amount_1,
+            token: dep.token,
+            owner: user,
+            withdrawn: false
+        }
+        val new_dep_2: Deposit = {
+            digest: dig_2,
+            amount: amount_2,
+            token: dep.token,
+            owner: user,
+            withdrawn: false
+        }
+        all {
+            has_active_deposit(deposits, dig),
+            verify_proof(user, dep.owner),
+            not(used_proofs.contains(dig)),
+            amount_1 > 0,
+            amount_2 > 0,
+            amount_1 + amount_2 == dep.amount,  // Conservation!
+            // BC-008: Если amount_1 == amount_2, то dig_1 == dig_2, и Set потеряет одну ноту!
+            // В реальном протоколе нужен nonce или другой механизм различения
+            amount_1 != amount_2,  // Временное ограничение для модели
+            not(deposits.exists(d => d.digest == dig_1)),
+            not(deposits.exists(d => d.digest == dig_2)),
+            deposits' = deposits.exclude(Set(dep))
+                               .union(Set(updated_dep))
+                               .union(Set(new_dep_1))
+                               .union(Set(new_dep_2)),
+            balances' = balances,  // Токены остаются в DEX
+            dex_balances' = dex_balances,  // Баланс DEX не меняется
+            op_count' = op_count + 1,
+            used_proofs' = used_proofs.union(Set(dig)),
+            pending_withdraws' = pending_withdraws,
+            timestamp' = timestamp + 1
+        }
+    }
+
+    // MERGE: Объединить две ноты в одну
+    // User должен владеть обеими нотами (знать оба sk)
+    action merge(user: UserId, dig_1: Digest, dig_2: Digest): bool = {
+        val dep_1 = find_active_deposit(deposits, dig_1)
+        val dep_2 = find_active_deposit(deposits, dig_2)
+        val updated_dep_1: Deposit = { ...dep_1, withdrawn: true }
+        val updated_dep_2: Deposit = { ...dep_2, withdrawn: true }
+        val new_amount = dep_1.amount + dep_2.amount
+        val dig_merged = compute_digest(user, dep_1.token, new_amount)
+        val new_dep: Deposit = {
+            digest: dig_merged,
+            amount: new_amount,
+            token: dep_1.token,
+            owner: user,
+            withdrawn: false
+        }
+        all {
+            has_active_deposit(deposits, dig_1),
+            has_active_deposit(deposits, dig_2),
+            dig_1 != dig_2,
+            dep_1.token == dep_2.token,  // Тот же тип токена
+            verify_proof(user, dep_1.owner),
+            verify_proof(user, dep_2.owner),
+            not(used_proofs.contains(dig_1)),
+            not(used_proofs.contains(dig_2)),
+            not(deposits.exists(d => d.digest == dig_merged)),
+            deposits' = deposits.exclude(Set(dep_1))
+                               .exclude(Set(dep_2))
+                               .union(Set(updated_dep_1))
+                               .union(Set(updated_dep_2))
+                               .union(Set(new_dep)),
+            balances' = balances,
+            dex_balances' = dex_balances,
+            op_count' = op_count + 1,
+            used_proofs' = used_proofs.union(Set(dig_1)).union(Set(dig_2)),
+            pending_withdraws' = pending_withdraws,
+            timestamp' = timestamp + 1
+        }
+    }
+
+    // TRANSFER_SK: Передача ноты другому пользователю (off-chain передача sk)
+    // В реальности: Alice передаёт sk Bob'у, Bob создаёт новый digest с тем же amount
+    // На уровне модели: меняется owner в digest
+    action transfer_note(from_user: UserId, to_user: UserId, dig: Digest): bool = {
+        val dep = find_active_deposit(deposits, dig)
+        val updated_dep: Deposit = { ...dep, withdrawn: true }
+        // Новый digest с новым owner (to_user получает контроль)
+        val new_dig = compute_digest(to_user, dep.token, dep.amount)
+        val new_dep: Deposit = {
+            digest: new_dig,
+            amount: dep.amount,
+            token: dep.token,
+            owner: to_user,
+            withdrawn: false
+        }
+        all {
+            has_active_deposit(deposits, dig),
+            verify_proof(from_user, dep.owner),
+            from_user != to_user,
+            not(used_proofs.contains(dig)),
+            not(deposits.exists(d => d.digest == new_dig)),
+            deposits' = deposits.exclude(Set(dep))
+                               .union(Set(updated_dep))
+                               .union(Set(new_dep)),
+            balances' = balances,
+            dex_balances' = dex_balances,
             op_count' = op_count + 1,
             used_proofs' = used_proofs.union(Set(dig)),
             pending_withdraws' = pending_withdraws,
@@ -289,6 +419,9 @@ module dark_dex_protocol {
     val TOKENS = Set(1, 2)
     val AMOUNTS = Set(100, 200)
 
+    // Split amounts (для split операции: a1 + a2 должно = исходному amount)
+    val SPLIT_AMOUNTS = Set((100, 100), (50, 150))  // пары, которые дают 200
+
     // Normal operations step
     action step = any {
         nondet u = USERS.oneOf()
@@ -304,6 +437,25 @@ module dark_dex_protocol {
         nondet u = USERS.oneOf()
         nondet dep = deposits.oneOf()
         withdraw(u, dep.digest),
+
+        // SPLIT: разбить ноту на две
+        nondet u = USERS.oneOf()
+        nondet dep = deposits.oneOf()
+        nondet a1 = AMOUNTS.oneOf()
+        nondet a2 = AMOUNTS.oneOf()
+        split(u, dep.digest, a1, a2),
+
+        // MERGE: объединить две ноты
+        nondet u = USERS.oneOf()
+        nondet dep1 = deposits.oneOf()
+        nondet dep2 = deposits.oneOf()
+        merge(u, dep1.digest, dep2.digest),
+
+        // TRANSFER: передать ноту другому пользователю
+        nondet sender = USERS.oneOf()
+        nondet receiver = USERS.oneOf()
+        nondet dep = deposits.oneOf()
+        transfer_note(sender, receiver, dep.digest),
 
         // Attack: proof forgery
         nondet attacker = USERS.oneOf()
@@ -359,6 +511,17 @@ module dark_dex_protocol {
         deposits.forall(d =>
             (d.digest == pw.digest and d.withdrawn) implies (d.owner == pw.requester)
         )
+    )
+
+    // INV-7: Split conservation
+    // After split, total amount in new notes = amount in original note
+    // This is implicitly checked by split action precondition, but we verify globally
+    val inv_split_conservation = inv_conservation  // Same as general conservation
+
+    // INV-8: Transfer preserves ownership chain
+    // A transferred note belongs to the new owner
+    val inv_transfer_valid = deposits.forall(d =>
+        not(d.withdrawn) implies (d.owner == d.digest.owner)
     )
 
     // ==========================================================================
@@ -470,6 +633,214 @@ module dark_dex_protocol {
     // TINV-3: Funds are never lost
     // Total tokens in system = tokens in balances + tokens in DEX
     // (This is a restatement of inv_conservation as a temporal property)
+
+}
+
+// ============================================================================
+// OPTIMIZED MODULE FOR APALACHE
+// ============================================================================
+// This module uses:
+// 1. Auxiliary variables instead of fold (total_minted, total_in_dex)
+// 2. Smaller domains (2 users, 1 token, 1 amount)
+// 3. Simplified state for faster bounded model checking
+// ============================================================================
+
+module dark_dex_apalache {
+
+    // ==========================================================================
+    // TYPES (same as main module)
+    // ==========================================================================
+
+    type UserId = int
+    type TokenType = int
+    type Amount = int
+    type Digest = { owner: UserId, token: TokenType, amount: Amount }
+
+    type Deposit = {
+        digest: Digest,
+        amount: Amount,
+        token: TokenType,
+        owner: UserId,
+        withdrawn: bool
+    }
+
+    // ==========================================================================
+    // STATE - with auxiliary variables for Apalache
+    // ==========================================================================
+
+    var deposits: Set[Deposit]
+    var op_count: int
+    var used_proofs: Set[Digest]
+
+    // AUXILIARY VARIABLES - maintained incrementally instead of fold
+    var total_minted: int       // Total tokens ever minted
+    var total_in_dex: int       // Total tokens currently in DEX (not withdrawn)
+    var total_withdrawn: int    // Total tokens withdrawn
+
+    // ==========================================================================
+    // PURE FUNCTIONS
+    // ==========================================================================
+
+    pure def compute_digest(user: UserId, token: TokenType, amount: Amount): Digest = {
+        { owner: user, token: token, amount: amount }
+    }
+
+    pure def verify_proof(claimed_user: UserId, actual_owner: UserId): bool = {
+        claimed_user == actual_owner
+    }
+
+    pure def find_active_deposit(deps: Set[Deposit], dig: Digest): Deposit = {
+        deps.filter(d => d.digest == dig and not(d.withdrawn))
+            .fold({ digest: dig, amount: 0, token: 0, owner: 0, withdrawn: false }, (acc, d) => d)
+    }
+
+    pure def has_active_deposit(deps: Set[Deposit], dig: Digest): bool = {
+        deps.exists(d => d.digest == dig and not(d.withdrawn))
+    }
+
+    // ==========================================================================
+    // INITIALIZATION
+    // ==========================================================================
+
+    action init = all {
+        deposits' = Set(),
+        op_count' = 0,
+        used_proofs' = Set(),
+        total_minted' = 0,
+        total_in_dex' = 0,
+        total_withdrawn' = 0
+    }
+
+    // ==========================================================================
+    // ACTIONS - with auxiliary variable updates
+    // ==========================================================================
+
+    // DEPOSIT: User deposits tokens into DEX
+    action deposit_apalache(user: UserId, token: TokenType, amount: Amount): bool = {
+        val dig = compute_digest(user, token, amount)
+        val new_dep: Deposit = {
+            digest: dig,
+            amount: amount,
+            token: token,
+            owner: user,
+            withdrawn: false
+        }
+        all {
+            amount > 0,
+            not(deposits.exists(d => d.digest == dig)),
+            deposits' = deposits.union(Set(new_dep)),
+            op_count' = op_count + 1,
+            used_proofs' = used_proofs,
+            // Update auxiliary variables
+            total_minted' = total_minted + amount,
+            total_in_dex' = total_in_dex + amount,
+            total_withdrawn' = total_withdrawn
+        }
+    }
+
+    // WITHDRAW: User withdraws tokens from DEX
+    action withdraw_apalache(user: UserId, dig: Digest): bool = {
+        val dep = find_active_deposit(deposits, dig)
+        val updated_dep: Deposit = { ...dep, withdrawn: true }
+        all {
+            has_active_deposit(deposits, dig),
+            verify_proof(user, dep.owner),
+            not(used_proofs.contains(dig)),
+            deposits' = deposits.exclude(Set(dep)).union(Set(updated_dep)),
+            op_count' = op_count + 1,
+            used_proofs' = used_proofs.union(Set(dig)),
+            // Update auxiliary variables
+            total_minted' = total_minted,
+            total_in_dex' = total_in_dex - dep.amount,
+            total_withdrawn' = total_withdrawn + dep.amount
+        }
+    }
+
+    // ATTACK: Proof forgery attempt
+    action attack_forgery_apalache(attacker: UserId, dig: Digest): bool = {
+        val dep = find_active_deposit(deposits, dig)
+        val updated_dep: Deposit = { ...dep, withdrawn: true }
+        all {
+            has_active_deposit(deposits, dig),
+            attacker != dep.owner,
+            verify_proof(attacker, dep.owner),  // Returns false!
+            deposits' = deposits.exclude(Set(dep)).union(Set(updated_dep)),
+            op_count' = op_count + 1,
+            used_proofs' = used_proofs,
+            total_minted' = total_minted,
+            total_in_dex' = total_in_dex - dep.amount,
+            total_withdrawn' = total_withdrawn + dep.amount
+        }
+    }
+
+    // ==========================================================================
+    // STEP - SMALL DOMAIN FOR APALACHE
+    // ==========================================================================
+
+    // Small domains for bounded model checking
+    val USERS = Set(1, 2)       // Only 2 users
+    val TOKENS = Set(1)         // Only 1 token type
+    val AMOUNTS = Set(100)      // Only 1 amount
+
+    // Stutter step - prevents deadlock when all actions are disabled
+    action stutter = all {
+        deposits' = deposits,
+        op_count' = op_count,
+        used_proofs' = used_proofs,
+        total_minted' = total_minted,
+        total_in_dex' = total_in_dex,
+        total_withdrawn' = total_withdrawn
+    }
+
+    action step = any {
+        // Normal deposit
+        nondet u = USERS.oneOf()
+        nondet t = TOKENS.oneOf()
+        nondet a = AMOUNTS.oneOf()
+        deposit_apalache(u, t, a),
+
+        // Normal withdraw
+        nondet u = USERS.oneOf()
+        nondet dep = deposits.oneOf()
+        withdraw_apalache(u, dep.digest),
+
+        // Attack: proof forgery
+        nondet attacker = USERS.oneOf()
+        nondet dep = deposits.oneOf()
+        attack_forgery_apalache(attacker, dep.digest),
+
+        // Stutter step to prevent deadlock
+        stutter
+    }
+
+    // ==========================================================================
+    // INVARIANTS - using auxiliary variables (no fold!)
+    // ==========================================================================
+
+    // INV-1: Conservation using auxiliary variables (O(1) instead of O(n))
+    val inv_conservation_aux = {
+        total_in_dex >= 0 and
+        total_minted == total_in_dex + total_withdrawn
+    }
+
+    // INV-2: Auxiliary variables match actual state
+    val inv_aux_consistent = {
+        val actual_in_dex = deposits.filter(d => not(d.withdrawn))
+                                    .fold(0, (acc, d) => acc + d.amount)
+        val actual_withdrawn = deposits.filter(d => d.withdrawn)
+                                       .fold(0, (acc, d) => acc + d.amount)
+        total_in_dex == actual_in_dex and total_withdrawn == actual_withdrawn
+    }
+
+    // INV-3: Only owner can withdraw
+    val inv_owner_only_aux = deposits.forall(d =>
+        d.withdrawn implies (d.digest.owner == d.owner)
+    )
+
+    // INV-4: No double withdrawal
+    val inv_no_double_withdraw_aux = deposits.forall(d =>
+        d.withdrawn implies used_proofs.contains(d.digest)
+    )
 
 }
 
