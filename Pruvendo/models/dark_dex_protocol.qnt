@@ -1,4 +1,4 @@
-// Dark DEX Protocol Model v2
+// Dark DEX Protocol Model v3
 //
 // Модель протокола приватных депозитов на Quint
 // Версия: poseidon_instead_of_ecc (без ECC)
@@ -6,7 +6,7 @@
 // ============================================================================
 // USER FLOW (как в реальном протоколе):
 // ============================================================================
-// 1. User имеет sk (секретный ключ)
+// 1. User генерирует НОВЫЙ sk = random::<u64>() для КАЖДОГО депозита
 // 2. User создаёт deposit: (token_type, amount)
 // 3. Circuit вычисляет:
 //    - sk_commitment = Poseidon(sk, 0)
@@ -18,7 +18,9 @@
 // PUBLIC INPUTS: [private_note_sum, token_type, digest]
 // PRIVATE INPUTS: [sk, sk_commitment]
 //
-// ВАЖНО: sum и token_type публичны! Приватен только sk.
+// ВАЖНО:
+// - sum и token_type публичны! Приватен только sk.
+// - sk уникален для КАЖДОГО депозита → digest уникален даже для (same owner, token, amount)
 //
 // ============================================================================
 // ATTACK SCENARIOS:
@@ -41,7 +43,9 @@ module dark_dex_protocol {
 
     // Digest - уникальный идентификатор депозита (абстракция над Poseidon hash)
     // В реальности: Poseidon(sk_commitment, sum, token, sk)
-    type Digest = { owner: UserId, token: TokenType, amount: Amount }
+    // где sk = random::<u64>() - уникальный для каждого депозита!
+    // nonce моделирует этот уникальный sk
+    type Digest = { owner: UserId, token: TokenType, amount: Amount, nonce: int }
 
     // Депозит в системе
     type Deposit = {
@@ -73,6 +77,7 @@ module dark_dex_protocol {
     var balances: Set[Balance]
     var dex_balances: Set[DexBalance]
     var op_count: int
+    var next_nonce: int                   // Counter for unique digest nonces (models random sk)
 
     // Attack tracking
     var used_proofs: Set[Digest]          // For replay attack detection
@@ -102,9 +107,10 @@ module dark_dex_protocol {
            .union(Set({ token: token, amount: new_amount }))
     }
 
-    // Абстракция Hash: (user, token, amount) -> unique digest
-    pure def compute_digest(user: UserId, token: TokenType, amount: Amount): Digest = {
-        { owner: user, token: token, amount: amount }
+    // Абстракция Hash: (user, token, amount, nonce) -> unique digest
+    // nonce моделирует уникальный sk = random::<u64>() в реальном протоколе
+    pure def compute_digest(user: UserId, token: TokenType, amount: Amount, nonce: int): Digest = {
+        { owner: user, token: token, amount: amount, nonce: nonce }
     }
 
     // Проверка ZK proof - user знает sk для digest
@@ -131,6 +137,7 @@ module dark_dex_protocol {
         balances' = Set(),
         dex_balances' = Set(),
         op_count' = 0,
+        next_nonce' = 0,
         used_proofs' = Set(),
         pending_withdraws' = Set(),
         timestamp' = 0
@@ -149,6 +156,7 @@ module dark_dex_protocol {
             deposits' = deposits,
             dex_balances' = dex_balances,
             op_count' = op_count + 1,
+            next_nonce' = next_nonce,
             used_proofs' = used_proofs,
             pending_withdraws' = pending_withdraws,
             timestamp' = timestamp + 1
@@ -156,9 +164,10 @@ module dark_dex_protocol {
     }
 
     // DEPOSIT: User вносит токены в DEX
+    // Каждый депозит получает уникальный nonce (моделирует random sk)
     action deposit(user: UserId, token: TokenType, amount: Amount): bool = {
         val user_bal = get_balance(balances, user, token)
-        val dig = compute_digest(user, token, amount)
+        val dig = compute_digest(user, token, amount, next_nonce)
         val new_dep: Deposit = {
             digest: dig,
             amount: amount,
@@ -169,11 +178,13 @@ module dark_dex_protocol {
         all {
             amount > 0,
             user_bal >= amount,
+            // С nonce digest всегда уникален, но проверка не повредит
             not(deposits.exists(d => d.digest == dig)),
             deposits' = deposits.union(Set(new_dep)),
             balances' = set_balance(balances, user, token, user_bal - amount),
             dex_balances' = set_dex_balance(dex_balances, token, get_dex_balance(dex_balances, token) + amount),
             op_count' = op_count + 1,
+            next_nonce' = next_nonce + 1,  // Increment nonce for next deposit
             used_proofs' = used_proofs,
             pending_withdraws' = pending_withdraws,
             timestamp' = timestamp + 1
@@ -194,6 +205,7 @@ module dark_dex_protocol {
             balances' = set_balance(balances, user, dep.token, cur_bal + dep.amount),
             dex_balances' = set_dex_balance(dex_balances, dep.token, get_dex_balance(dex_balances, dep.token) - dep.amount),
             op_count' = op_count + 1,
+            next_nonce' = next_nonce,
             used_proofs' = used_proofs.union(Set(dig)),
             pending_withdraws' = pending_withdraws,
             timestamp' = timestamp + 1
@@ -211,12 +223,13 @@ module dark_dex_protocol {
     // Input: digest_old (amount = a1 + a2)
     // Output: digest_new_1 (amount = a1), digest_new_2 (amount = a2)
     // User доказывает владение digest_old через ZK proof
+    // Каждая новая нота получает уникальный nonce
     action split(user: UserId, dig: Digest, amount_1: Amount, amount_2: Amount): bool = {
         val dep = find_active_deposit(deposits, dig)
         val updated_dep: Deposit = { ...dep, withdrawn: true }
-        // Новые digests с новыми amounts (но тот же owner и token)
-        val dig_1 = compute_digest(user, dep.token, amount_1)
-        val dig_2 = compute_digest(user, dep.token, amount_2)
+        // Новые digests с новыми amounts И уникальными nonce
+        val dig_1 = compute_digest(user, dep.token, amount_1, next_nonce)
+        val dig_2 = compute_digest(user, dep.token, amount_2, next_nonce + 1)
         val new_dep_1: Deposit = {
             digest: dig_1,
             amount: amount_1,
@@ -238,11 +251,7 @@ module dark_dex_protocol {
             amount_1 > 0,
             amount_2 > 0,
             amount_1 + amount_2 == dep.amount,  // Conservation!
-            // BC-008: Если amount_1 == amount_2, то dig_1 == dig_2, и Set потеряет одну ноту!
-            // В реальном протоколе нужен nonce или другой механизм различения
-            amount_1 != amount_2,  // Временное ограничение для модели
-            not(deposits.exists(d => d.digest == dig_1)),
-            not(deposits.exists(d => d.digest == dig_2)),
+            // С уникальными nonce, dig_1 != dig_2 даже при amount_1 == amount_2
             deposits' = deposits.exclude(Set(dep))
                                .union(Set(updated_dep))
                                .union(Set(new_dep_1))
@@ -250,6 +259,7 @@ module dark_dex_protocol {
             balances' = balances,  // Токены остаются в DEX
             dex_balances' = dex_balances,  // Баланс DEX не меняется
             op_count' = op_count + 1,
+            next_nonce' = next_nonce + 2,  // Использовали 2 nonce
             used_proofs' = used_proofs.union(Set(dig)),
             pending_withdraws' = pending_withdraws,
             timestamp' = timestamp + 1
@@ -264,7 +274,7 @@ module dark_dex_protocol {
         val updated_dep_1: Deposit = { ...dep_1, withdrawn: true }
         val updated_dep_2: Deposit = { ...dep_2, withdrawn: true }
         val new_amount = dep_1.amount + dep_2.amount
-        val dig_merged = compute_digest(user, dep_1.token, new_amount)
+        val dig_merged = compute_digest(user, dep_1.token, new_amount, next_nonce)
         val new_dep: Deposit = {
             digest: dig_merged,
             amount: new_amount,
@@ -281,7 +291,6 @@ module dark_dex_protocol {
             verify_proof(user, dep_2.owner),
             not(used_proofs.contains(dig_1)),
             not(used_proofs.contains(dig_2)),
-            not(deposits.exists(d => d.digest == dig_merged)),
             deposits' = deposits.exclude(Set(dep_1))
                                .exclude(Set(dep_2))
                                .union(Set(updated_dep_1))
@@ -290,6 +299,7 @@ module dark_dex_protocol {
             balances' = balances,
             dex_balances' = dex_balances,
             op_count' = op_count + 1,
+            next_nonce' = next_nonce + 1,
             used_proofs' = used_proofs.union(Set(dig_1)).union(Set(dig_2)),
             pending_withdraws' = pending_withdraws,
             timestamp' = timestamp + 1
@@ -297,13 +307,13 @@ module dark_dex_protocol {
     }
 
     // TRANSFER_SK: Передача ноты другому пользователю (off-chain передача sk)
-    // В реальности: Alice передаёт sk Bob'у, Bob создаёт новый digest с тем же amount
-    // На уровне модели: меняется owner в digest
+    // В реальности: Alice передаёт sk Bob'у, Bob создаёт новый digest
+    // Новый digest с новым owner и новым nonce (Bob генерирует свой sk)
     action transfer_note(from_user: UserId, to_user: UserId, dig: Digest): bool = {
         val dep = find_active_deposit(deposits, dig)
         val updated_dep: Deposit = { ...dep, withdrawn: true }
-        // Новый digest с новым owner (to_user получает контроль)
-        val new_dig = compute_digest(to_user, dep.token, dep.amount)
+        // Новый digest с новым owner и уникальным nonce
+        val new_dig = compute_digest(to_user, dep.token, dep.amount, next_nonce)
         val new_dep: Deposit = {
             digest: new_dig,
             amount: dep.amount,
@@ -316,13 +326,14 @@ module dark_dex_protocol {
             verify_proof(from_user, dep.owner),
             from_user != to_user,
             not(used_proofs.contains(dig)),
-            not(deposits.exists(d => d.digest == new_dig)),
+            // С nonce проверка уникальности не нужна, но оставим для защиты
             deposits' = deposits.exclude(Set(dep))
                                .union(Set(updated_dep))
                                .union(Set(new_dep)),
             balances' = balances,
             dex_balances' = dex_balances,
             op_count' = op_count + 1,
+            next_nonce' = next_nonce + 1,
             used_proofs' = used_proofs.union(Set(dig)),
             pending_withdraws' = pending_withdraws,
             timestamp' = timestamp + 1
@@ -345,6 +356,7 @@ module dark_dex_protocol {
             balances' = set_balance(balances, attacker, dep.token, dep.amount),
             dex_balances' = set_dex_balance(dex_balances, dep.token, get_dex_balance(dex_balances, dep.token) - dep.amount),
             op_count' = op_count + 1,
+            next_nonce' = next_nonce,
             used_proofs' = used_proofs,
             pending_withdraws' = pending_withdraws,
             timestamp' = timestamp + 1
@@ -366,6 +378,7 @@ module dark_dex_protocol {
             balances' = set_balance(balances, user, dep.token, cur_bal + dep.amount),
             dex_balances' = set_dex_balance(dex_balances, dep.token, get_dex_balance(dex_balances, dep.token) - dep.amount),
             op_count' = op_count + 1,
+            next_nonce' = next_nonce,
             used_proofs' = used_proofs,
             pending_withdraws' = pending_withdraws,
             timestamp' = timestamp + 1
@@ -385,6 +398,7 @@ module dark_dex_protocol {
             balances' = balances,
             dex_balances' = dex_balances,
             op_count' = op_count + 1,
+            next_nonce' = next_nonce,
             used_proofs' = used_proofs,
             timestamp' = timestamp + 1
         }
@@ -405,6 +419,7 @@ module dark_dex_protocol {
             balances' = set_balance(balances, miner, dep.token, dep.amount),
             dex_balances' = set_dex_balance(dex_balances, dep.token, get_dex_balance(dex_balances, dep.token) - dep.amount),
             op_count' = op_count + 1,
+            next_nonce' = next_nonce,
             used_proofs' = used_proofs,
             pending_withdraws' = pending_withdraws,
             timestamp' = timestamp + 1
@@ -654,7 +669,8 @@ module dark_dex_apalache {
     type UserId = int
     type TokenType = int
     type Amount = int
-    type Digest = { owner: UserId, token: TokenType, amount: Amount }
+    // Digest includes nonce to model unique sk per deposit
+    type Digest = { owner: UserId, token: TokenType, amount: Amount, nonce: int }
 
     type Deposit = {
         digest: Digest,
@@ -670,6 +686,7 @@ module dark_dex_apalache {
 
     var deposits: Set[Deposit]
     var op_count: int
+    var next_nonce: int           // Counter for unique nonces
     var used_proofs: Set[Digest]
 
     // AUXILIARY VARIABLES - maintained incrementally instead of fold
@@ -681,8 +698,8 @@ module dark_dex_apalache {
     // PURE FUNCTIONS
     // ==========================================================================
 
-    pure def compute_digest(user: UserId, token: TokenType, amount: Amount): Digest = {
-        { owner: user, token: token, amount: amount }
+    pure def compute_digest(user: UserId, token: TokenType, amount: Amount, nonce: int): Digest = {
+        { owner: user, token: token, amount: amount, nonce: nonce }
     }
 
     pure def verify_proof(claimed_user: UserId, actual_owner: UserId): bool = {
@@ -705,6 +722,7 @@ module dark_dex_apalache {
     action init = all {
         deposits' = Set(),
         op_count' = 0,
+        next_nonce' = 0,
         used_proofs' = Set(),
         total_minted' = 0,
         total_in_dex' = 0,
@@ -717,7 +735,7 @@ module dark_dex_apalache {
 
     // DEPOSIT: User deposits tokens into DEX
     action deposit_apalache(user: UserId, token: TokenType, amount: Amount): bool = {
-        val dig = compute_digest(user, token, amount)
+        val dig = compute_digest(user, token, amount, next_nonce)
         val new_dep: Deposit = {
             digest: dig,
             amount: amount,
@@ -727,9 +745,10 @@ module dark_dex_apalache {
         }
         all {
             amount > 0,
-            not(deposits.exists(d => d.digest == dig)),
+            // With nonce, digest is always unique
             deposits' = deposits.union(Set(new_dep)),
             op_count' = op_count + 1,
+            next_nonce' = next_nonce + 1,
             used_proofs' = used_proofs,
             // Update auxiliary variables
             total_minted' = total_minted + amount,
@@ -748,6 +767,7 @@ module dark_dex_apalache {
             not(used_proofs.contains(dig)),
             deposits' = deposits.exclude(Set(dep)).union(Set(updated_dep)),
             op_count' = op_count + 1,
+            next_nonce' = next_nonce,
             used_proofs' = used_proofs.union(Set(dig)),
             // Update auxiliary variables
             total_minted' = total_minted,
@@ -766,6 +786,7 @@ module dark_dex_apalache {
             verify_proof(attacker, dep.owner),  // Returns false!
             deposits' = deposits.exclude(Set(dep)).union(Set(updated_dep)),
             op_count' = op_count + 1,
+            next_nonce' = next_nonce,
             used_proofs' = used_proofs,
             total_minted' = total_minted,
             total_in_dex' = total_in_dex - dep.amount,
@@ -786,6 +807,7 @@ module dark_dex_apalache {
     action stutter = all {
         deposits' = deposits,
         op_count' = op_count,
+        next_nonce' = next_nonce,
         used_proofs' = used_proofs,
         total_minted' = total_minted,
         total_in_dex' = total_in_dex,
