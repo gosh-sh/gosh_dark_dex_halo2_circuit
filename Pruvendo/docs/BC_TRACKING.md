@@ -38,30 +38,32 @@
 ## Быстрый старт
 
 ```bash
-# Проверить статус ВСЕХ известных BC:
+# Запустить все 116 property тестов:
 cd Pruvendo/tests/property_tests
-cargo test --release -- --nocapture 2>&1 | grep -E "BC-00[0-9]|STATUS:"
+cargo test --release
 
-# Запустить конкретный тест:
-cargo test test_generator_identity --release -- --nocapture  # BC-002
-cargo test test_corrupted_vk --release -- --ignored --nocapture  # BC-001
-cargo test bc003 --release -- --ignored --nocapture  # BC-003
-cargo test test_corrupted_kzg_params_bytes --release -- --ignored --nocapture  # BC-004/005
-cargo test bc006 --release -- --ignored --nocapture  # BC-006
+# Актуальные BC (upstream issues):
+# BC-001: corrupted VK bytes - halo2curves
+# BC-003/BC-005: corrupted KZG params - halo2_proofs
+# BC-006: non-canonical field elements - informational
 ```
+
+> **ПРИМЕЧАНИЕ:** После рефакторинга `poseidon_instead_of_ecc` тесты для закрытых BC (BC-002, BC-004, BC-007) были удалены.
 
 ## Список Bug Candidates (актуальный статус на 2026-01-21)
 
+> **ВАЖНО**: После рефакторинга `poseidon_instead_of_ecc` многие BC были закрыты!
+> Circuit больше не использует ECC операции, vault_rand_val убран.
+
 | ID | Название | Severity | Текущий статус |
 |----|----------|----------|----------------|
-| BC-001 | Panic при corrupted VK bytes (header) | Medium | ⚠️ REPRODUCED |
-| BC-001 | Panic при corrupted VK bytes (middle) | Medium | ✅ NOT CONFIRMED |
-| BC-002 | Panic при g = identity point | Medium | ⚠️ REPRODUCED |
-| BC-003 | shl_overflow при corrupted KZG header | Medium | ⚠️ REPRODUCED |
-| BC-004 | shl_overflow в commitment.rs | Medium | ✅ NOT CONFIRMED |
-| BC-005 | shl_overflow в domain.rs | Medium | Дубликат BC-004 |
+| BC-001 | Panic при corrupted VK bytes | Medium | ⚠️ Актуален (upstream halo2curves) |
+| ~~BC-002~~ | ~~Panic при g = identity point~~ | ~~Medium~~ | ❌ **CLOSED** - ECC убран из circuit |
+| BC-003 | shl_overflow при corrupted KZG header | Medium | ⚠️ Актуален (upstream halo2_proofs) |
+| ~~BC-004~~ | ~~shl_overflow в commitment.rs (limbs)~~ | ~~Medium~~ | ❌ **CLOSED** - limbs decomposition убран |
+| BC-005 | shl_overflow в domain.rs | Medium | Дубликат BC-003 (upstream) |
 | BC-006 | Non-canonical field elements | Low | ✅ Not a soundness issue |
-| BC-007 | deposit_sum коллизии | Low | ✅ Not exploitable |
+| ~~BC-007~~ | ~~deposit_sum коллизии~~ | ~~Low~~ | ❌ **CLOSED** - vault_rand_val убран |
 | ~~BC-008~~ | ~~Split с одинаковыми amounts~~ | ~~Low~~ | ❌ NOT A BUG (model artifact) |
 
 ## Детали каждого Bug Candidate
@@ -72,11 +74,11 @@ cargo test bc006 --release -- --ignored --nocapture  # BC-006
 - **Причина:** halo2curves не обрабатывает gracefully corrupted данные
 - **Рекомендация:** Валидировать VK перед использованием
 
-### BC-002: Panic при g = identity point
-- **Тест:** `test_generator_identity`
-- **Воспроизведение:** `cargo test test_generator_identity --release -- --nocapture`
-- **Причина:** subtle crate не поддерживает identity point в операциях
-- **Рекомендация:** Проверять g != identity на входе
+### ~~BC-002~~: Panic при g = identity point (CLOSED)
+- **Статус:** ❌ **CLOSED** после рефакторинга `poseidon_instead_of_ecc`
+- **Причина закрытия:** Circuit больше не использует ECC операции
+- **Было:** subtle crate не поддерживал identity point
+- **Теперь:** EccChip, scalar_multiply и все EC операции убраны из circuit
 
 ### BC-003: OOM/panic при corrupted KZG header
 - **Тест:** `test_corrupted_kzg_header_bc003`
@@ -84,40 +86,26 @@ cargo test bc006 --release -- --ignored --nocapture  # BC-006
 - **Причина:** Corrupted size в header приводит к попытке выделить петабайты памяти
 - **Рекомендация:** Валидировать размеры перед аллокацией
 
-### BC-004/BC-005: shl_overflow в halo2_proofs
-- **Тест:** `test_corrupted_kzg_params_bytes`
-- **Воспроизведение:** `cargo test test_corrupted_kzg_params_bytes --release -- --ignored --nocapture`
-- **Причина:** Corrupted данные вызывают overflow при shift операциях
-- **Рекомендация:** Upstream fix или валидация данных
+### ~~BC-004~~: shl_overflow в commitment.rs (CLOSED)
+- **Статус:** ❌ **CLOSED** после рефакторинга `poseidon_instead_of_ecc`
+- **Причина закрытия:** Limbs decomposition больше не используется в circuit
+- **Примечание:** BC-003/BC-005 (corrupted KZG params) остаётся актуальным - это upstream issue
+
+### BC-005/BC-003: shl_overflow в halo2_proofs (upstream)
+- **Статус:** ⚠️ Актуален - upstream issue в halo2_proofs
+- **Причина:** Corrupted KZG params вызывают overflow при shift операциях
+- **Рекомендация:** Валидировать KZG params перед использованием
 
 ### BC-006: Non-canonical field elements
-- **Тесты:** `test_bc006_vk_bit7_manipulation_*`, `test_bc006_verification_with_modified_vk`
-- **Воспроизведение:** `cargo test bc006 --release -- --ignored --nocapture`
-- **Статус:** NOT a soundness issue - elements are reduced during arithmetic
-- **Рекомендация:** Low priority, informational
+- **Статус:** ✅ Informational - NOT a soundness issue
+- **Причина:** Elements are reduced during arithmetic operations
+- **Рекомендация:** Low priority
 
-### BC-007: deposit_sum collision (LOW - NOT EXPLOITABLE)
-- **Найден:** Overnight fuzzing 15.01.2026
-- **Fuzz targets:** `fuzz_digest_collision`, `fuzz_multikey_digest`
-- **Воспроизведение:**
-  ```bash
-  cargo +nightly fuzz run fuzz_digest_collision --fuzz-dir Pruvendo/fuzz \
-    Pruvendo/fuzz/artifacts/fuzz_digest_collision/crash-bf9dd64e8719cdd48add91072c80230cbe2ad6cb
-  ```
-- **Суть проблемы:**
-  - `deposit_sum = token + sum + vault` (additive formula)
-  - Different `(token, vault)` pairs with the same sum produce identical `deposit_sum`
-  - Example: `(token=91577, vault=691321)` and `(token=93113, vault=689785)` produce same digest
-- **Почему НЕ эксплуатируется:**
-  - `token_type` и `private_note_sum` являются **PUBLIC INPUTS** (проверяются verifier'ом)
-  - Схема проверяет: `public_inputs = [private_note_sum, token_type, digest]`
-  - Если атакующий изменит token или sum, verifier это увидит
-  - Единственный приватный компонент (`vault_rand_val`) не даёт атакующему преимущества
-- **Статус:** ✅ Informational - не является soundness уязвимостью
-- **Рекомендация (defense in depth):** Для большей прозрачности можно изменить формулу:
-  ```
-  digest = poseidon_hash([key_sum, token, sum, vault])  // hash separately
-  ```
+### ~~BC-007~~: deposit_sum collision (CLOSED)
+- **Статус:** ❌ **CLOSED** после рефакторинга
+- **Причина закрытия:** `vault_rand_val` убран из circuit
+- **Было:** `deposit_sum = token + sum + vault` - возможны коллизии
+- **Теперь:** `digest = Poseidon(sk_commitment, sum, token, sk)` - коллизии невозможны благодаря sk
 
 ### ~~BC-008~~: Split с одинаковыми amounts (NOT A BUG)
 - **Найден:** Model checking 21.01.2026
