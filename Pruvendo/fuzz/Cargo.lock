@@ -307,6 +307,7 @@ dependencies = [
  "halo2_proofs",
  "halo2curves",
  "libfuzzer-sys",
+ "poseidon-base",
 ]
 
 [[package]]

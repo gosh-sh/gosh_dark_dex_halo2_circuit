@@ -2,8 +2,10 @@
 //!
 //! Версия: poseidon_instead_of_ecc
 //!
-//! Проверяет что poseidon_hash() детерминистичен:
-//! hash(a, b) == hash(a, b) для любых a, b
+//! Проверяет:
+//! 1. poseidon_hash() детерминистичен: hash(a, b) == hash(a, b)
+//! 2. Library hash == reference implementation hash (CROSS-VALIDATION)
+//! 3. Несимметричность: hash(a, b) != hash(b, a) для a != b
 
 #![no_main]
 
@@ -19,14 +21,6 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    // Создаём два Fr элемента из входных данных
-    let mut bytes1 = [0u8; 32];
-    let mut bytes2 = [0u8; 32];
-
-    // Используем первые 8 байт для a, следующие 8 для b
-    bytes1[..8].copy_from_slice(&data[..8]);
-    bytes2[..8].copy_from_slice(&data[8..16]);
-
     let a = Fr::from_u128(u128::from_le_bytes({
         let mut arr = [0u8; 16];
         arr[..8].copy_from_slice(&data[..8]);
@@ -39,25 +33,24 @@ fuzz_target!(|data: &[u8]| {
         arr
     }));
 
-    // Вычисляем hash дважды
+    // === TEST 1: DETERMINISM ===
     let hash1 = poseidon_hash([a, b]);
     let hash2 = poseidon_hash([a, b]);
+    assert_eq!(hash1, hash2, "DETERMINISM VIOLATION: Poseidon hash is not deterministic!");
 
-    // CONSISTENCY: hash должен быть детерминистичным
-    assert_eq!(hash1, hash2, "EXT-01: Poseidon hash is not deterministic!");
+    // === TEST 2: CROSS-VALIDATION с reference implementation ===
+    let ref_hash = reference_poseidon_hash_2([a, b]);
+    assert_eq!(hash1, ref_hash,
+        "TAUTOLOGY VIOLATION: Library hash differs from reference implementation!\n\
+         a={:?}, b={:?}\n\
+         library={:?}, reference={:?}",
+        a, b, hash1, ref_hash);
 
-    // UNIQUENESS: разные входы должны давать разные выходы (с высокой вероятностью)
+    // === TEST 3: NON-SYMMETRY ===
     if a != b {
         let hash_ab = poseidon_hash([a, b]);
         let hash_ba = poseidon_hash([b, a]);
-        // Poseidon НЕ симметричный
-        assert_ne!(hash_ab, hash_ba, "EXT-01: Poseidon should not be symmetric for a != b");
-    }
-
-    // NON-ZERO: hash не должен быть нулём для не-нулевых входов
-    if a != Fr::zero() || b != Fr::zero() {
-        // Это свойство сложно гарантировать, но можем проверить
-        // что hash хотя бы не всегда ноль
+        assert_ne!(hash_ab, hash_ba, "Poseidon should not be symmetric for a != b");
     }
 });
 

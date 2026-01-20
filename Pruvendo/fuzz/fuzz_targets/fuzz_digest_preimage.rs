@@ -8,6 +8,16 @@
 //! Новая формула: digest = poseidon(sk_commitment, sum, token, sk)
 //!
 //! Ожидание: Poseidon collision resistant, не должно быть найдено
+//!
+//! CROSS-VALIDATION: использует compute_digest_verified для
+//! независимой верификации через reference implementation.
+//!
+//! ОТЛИЧИЕ от fuzz_digest_collision:
+//! - fuzz_digest_collision: ищет любые коллизии между двумя наборами inputs
+//! - fuzz_digest_preimage: дополнительно проверяет PARTIAL COLLISIONS:
+//!   * Разные sk, одинаковые token/sum → должны давать разные digests
+//!   * Одинаковый sk, разные token/sum → должны давать разные digests
+//!   Это тестирует binding свойства каждого компонента отдельно.
 
 #![no_main]
 
@@ -57,9 +67,9 @@ fuzz_target!(|input: DigestPreimageInput| {
     let sum1 = Fr::from(input.sum1);
     let sum2 = Fr::from(input.sum2);
 
-    // Вычисляем digests
-    let digest1 = compute_digest(sk1, token1, sum1);
-    let digest2 = compute_digest(sk2, token2, sum2);
+    // Вычисляем digests с CROSS-VALIDATION
+    let digest1 = compute_digest_verified(sk1, token1, sum1);
+    let digest2 = compute_digest_verified(sk2, token2, sum2);
 
     // Проверяем collision
     if digest1 == digest2 {

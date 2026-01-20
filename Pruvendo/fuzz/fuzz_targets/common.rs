@@ -4,6 +4,8 @@
 //!
 //! Содержит helpers для работы с ZKP схемой в контексте fuzzing.
 //! Новая архитектура использует только Poseidon hash, без ECC.
+//!
+//! Включает REFERENCE IMPLEMENTATION Poseidon для cross-validation.
 
 #![allow(dead_code)]
 
@@ -20,6 +22,117 @@ use std::sync::Once;
 
 /// Константа k для схемы (новая архитектура: k=8)
 pub const CIRCUIT_K: u32 = 8;
+
+// =============================================================================
+// REFERENCE POSEIDON IMPLEMENTATION
+// =============================================================================
+//
+// Независимая реализация Poseidon для cross-validation.
+// Использует poseidon_base primitives напрямую, step-by-step.
+//
+// Это устраняет тавтологию: если poseidon_hash сломан, reference_poseidon_hash
+// покажет расхождение.
+//
+// Sponge construction для ConstantLength<L>:
+// - Initial state: [input[0], input[1], capacity] где capacity = 2^65 * L
+// - Для L > RATE: absorb по RATE элементов, permute между absorb
+// - Output = state[0] после финальной permutation
+
+use poseidon_base::primitives::{permute, P128Pow5T3, P128Pow5T3Compact, ConstantLength, Spec};
+use poseidon_base::primitives::bn256::fp::{ROUND_CONSTANTS, MDS};
+use poseidon_base::primitives::Hash as PoseidonHashPrimitive;
+
+/// Вычисляет capacity element для ConstantLength<L>
+/// capacity = L * 2^64 (согласно ePrint 2019/458 section 4.2)
+fn compute_capacity(len: usize) -> Fr {
+    // F::from_u128((L as u128) << 64)
+    // 2^64 = 2^63 * 2
+    let two_to_63 = Fr::from(1u64 << 63);
+    let two_to_64 = two_to_63.double();
+    two_to_64 * Fr::from(len as u64)
+}
+
+/// Reference Poseidon hash - использует низкоуровневые primitives
+/// для независимой верификации
+pub fn reference_poseidon_hash_2(inputs: [Fr; 2]) -> Fr {
+    // Sponge construction для rate=2, capacity=1, L=2
+    // Initial state: [input[0], input[1], capacity]
+    // capacity = 2 * 2^65
+    let capacity = compute_capacity(2);
+    let mut state = [inputs[0], inputs[1], capacity];
+
+    // Apply permutation
+    let rc: &[[Fr; 3]] = &*ROUND_CONSTANTS;
+    let mds: &[[Fr; 3]; 3] = &*MDS;
+
+    permute::<Fr, P128Pow5T3<Fr>, 3, 2>(&mut state, mds, rc);
+
+    // Output is first element after permutation
+    state[0]
+}
+
+/// Reference Poseidon hash для 4 элементов
+pub fn reference_poseidon_hash_4(inputs: [Fr; 4]) -> Fr {
+    // Для L=4: нужно 2 absorb фазы (rate=2)
+    // Initial state: [input[0], input[1], capacity] где capacity = 4 * 2^65
+    let capacity = compute_capacity(4);
+    let mut state = [inputs[0], inputs[1], capacity];
+
+    let rc: &[[Fr; 3]] = &*ROUND_CONSTANTS;
+    let mds: &[[Fr; 3]; 3] = &*MDS;
+
+    // Phase 1: permute с первыми 2 элементами
+    permute::<Fr, P128Pow5T3<Fr>, 3, 2>(&mut state, mds, rc);
+
+    // Phase 2: absorb следующие 2 элемента (XOR with state)
+    state[0] += inputs[2];
+    state[1] += inputs[3];
+
+    // Phase 2: permute
+    permute::<Fr, P128Pow5T3<Fr>, 3, 2>(&mut state, mds, rc);
+
+    state[0]
+}
+
+/// Hardcoded test vectors для верификации Poseidon реализации
+/// Эти значения вычислены и зафиксированы как baseline
+pub const POSEIDON_TEST_VECTORS: &[([u64; 2], &str)] = &[
+    // (inputs, expected_hash_hex)
+    ([2, 3], "0x19014d18a3179c5731155fcb7b6da422f456bccbd6da9dbc7df0f8dc6d4938ed"),
+    ([0, 0], "0x2098f5fb9e239eab3ceac3f27b81e481dc3124d55ffed523a839ee8446b64864"),
+    ([1, 1], "0x115cc0f5e7d690413df64c6b9662e9cf2a3617f2743245519e19607a4417189a"),
+];
+
+/// Проверяет что poseidon_hash соответствует reference implementation
+pub fn verify_poseidon_consistency(a: Fr, b: Fr) -> bool {
+    let lib_hash = poseidon_hash([a, b]);
+    let ref_hash = reference_poseidon_hash_2([a, b]);
+    lib_hash == ref_hash
+}
+
+/// Вычисляет digest с cross-validation
+/// Панкует если library и reference дают разные результаты
+pub fn compute_digest_verified(sk: Fr, token_type: Fr, private_note_sum: Fr) -> Fr {
+    // Library implementation
+    let sk_commitment = compute_sk_commitment(sk);
+    let digest = poseidon_hash([sk_commitment, private_note_sum, token_type, sk]);
+
+    // Reference implementation для sk_commitment
+    let ref_sk_commitment = reference_poseidon_hash_2([sk, Fr::zero()]);
+
+    // Cross-validate sk_commitment
+    assert_eq!(sk_commitment, ref_sk_commitment,
+        "TAUTOLOGY VIOLATION: sk_commitment mismatch between library and reference!");
+
+    // Reference implementation для digest
+    let ref_digest = reference_poseidon_hash_4([sk_commitment, private_note_sum, token_type, sk]);
+
+    // Cross-validate digest
+    assert_eq!(digest, ref_digest,
+        "TAUTOLOGY VIOLATION: digest mismatch between library and reference!");
+
+    digest
+}
 
 static INIT: Once = Once::new();
 

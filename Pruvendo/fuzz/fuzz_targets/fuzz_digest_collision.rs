@@ -7,6 +7,9 @@
 //! - Проверяет collision resistance хэша
 //!
 //! КРИТИЧЕСКИЙ БАГ если найдена коллизия!
+//!
+//! CROSS-VALIDATION: использует compute_digest_verified для
+//! независимой верификации через reference implementation.
 
 #![no_main]
 
@@ -15,7 +18,7 @@ mod common;
 use libfuzzer_sys::fuzz_target;
 use arbitrary::Arbitrary;
 use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
-use common::{ensure_working_directory, compute_digest};
+use common::{ensure_working_directory, compute_digest_verified};
 
 #[derive(Arbitrary, Debug, Clone)]
 struct DigestInput {
@@ -48,19 +51,19 @@ fuzz_target!(|input: CollisionInput| {
         return;
     }
 
-    // Ограничиваем значения
-    let token1 = input.input1.token % 1_000_000;
-    let sum1 = input.input1.sum % 1_000_000_000;
+    // Используем полный диапазон u64 для лучшего покрытия
+    let token1 = input.input1.token;
+    let sum1 = input.input1.sum;
+    let token2 = input.input2.token;
+    let sum2 = input.input2.sum;
 
-    let token2 = input.input2.token % 1_000_000;
-    let sum2 = input.input2.sum % 1_000_000_000;
-
-    // Вычисляем digests
+    // Вычисляем digests с CROSS-VALIDATION
+    // compute_digest_verified сравнивает library с reference implementation
     let sk1 = Fr::from(input.input1.sk_seed);
     let sk2 = Fr::from(input.input2.sk_seed);
 
-    let digest1 = compute_digest(sk1, Fr::from(token1), Fr::from(sum1));
-    let digest2 = compute_digest(sk2, Fr::from(token2), Fr::from(sum2));
+    let digest1 = compute_digest_verified(sk1, Fr::from(token1), Fr::from(sum1));
+    let digest2 = compute_digest_verified(sk2, Fr::from(token2), Fr::from(sum2));
 
     // ASSERTION: Разные входы должны давать разные digests
     assert!(

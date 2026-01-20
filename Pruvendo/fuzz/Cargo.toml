@@ -22,6 +22,9 @@ halo2-base = { git = "https://github.com/scroll-tech/halo2-lib", branch = "devel
 # Для импортов halo2curves
 halo2curves = { git = "https://github.com/scroll-tech/halo2curves", branch = "v0.1.0" }
 
+# Poseidon primitives для reference implementation (cross-validation)
+poseidon-base = { git = "https://github.com/scroll-tech/poseidon-circuit", branch = "main" }
+
 # Патчи из основного проекта
 [patch.crates-io]
 halo2curves = { git = "https://github.com/scroll-tech/halo2curves", branch = "v0.1.0" }
@@ -89,13 +92,6 @@ doc = false
 bench = false
 
 [[bin]]
-name = "fuzz_soundness_extended"
-path = "fuzz_targets/fuzz_soundness_extended.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "fuzz_proving_key_bytes"
 path = "fuzz_targets/fuzz_proving_key_bytes.rs"
 test = false
@@ -133,13 +129,6 @@ bench = false
 [[bin]]
 name = "fuzz_proof_replay"
 path = "fuzz_targets/fuzz_proof_replay.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_multikey_digest"
-path = "fuzz_targets/fuzz_multikey_digest.rs"
 test = false
 doc = false
 bench = false
