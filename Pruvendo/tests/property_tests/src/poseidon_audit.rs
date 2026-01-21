@@ -13,7 +13,6 @@
 //! - Total rounds: 65
 
 use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
-use halo2_base::halo2_proofs::halo2curves::ff::{Field, PrimeField};
 use gosh_dark_dex_halo2_circuit::circuit::poseidon_hash;
 use proptest::prelude::*;
 
@@ -32,22 +31,22 @@ fn test_mds_matrix_invertibility() {
     
     // Вычисляем MDS * MDS_INV
     let mut result = [[Fr::zero(); 3]; 3];
-    for i in 0..3 {
-        for j in 0..3 {
-            for k in 0..3 {
-                result[i][j] += mds[i][k] * mds_inv[k][j];
+    for (i, result_row) in result.iter_mut().enumerate() {
+        for (j, result_elem) in result_row.iter_mut().enumerate() {
+            for (k, mds_inv_col) in mds_inv.iter().enumerate() {
+                *result_elem += mds[i][k] * mds_inv_col[j];
             }
         }
     }
-    
+
     // Проверяем что результат - единичная матрица
-    for i in 0..3 {
-        for j in 0..3 {
+    for (i, result_row) in result.iter().enumerate() {
+        for (j, result_elem) in result_row.iter().enumerate() {
             if i == j {
-                assert_eq!(result[i][j], Fr::one(), 
+                assert_eq!(*result_elem, Fr::one(),
                     "MDS * MDS_INV diagonal element [{i}][{j}] should be 1");
             } else {
-                assert_eq!(result[i][j], Fr::zero(), 
+                assert_eq!(*result_elem, Fr::zero(),
                     "MDS * MDS_INV off-diagonal element [{i}][{j}] should be 0");
             }
         }
@@ -89,6 +88,7 @@ fn test_mds_is_mds() {
 // =============================================================================
 
 #[test]
+#[allow(unused_imports)]
 fn test_sbox_x5() {
     // S-box должен вычислять x^5
     use poseidon_base::primitives::{Spec, P128Pow5T3};
@@ -115,6 +115,7 @@ fn test_sbox_x5() {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1000))]
     
+    #[allow(unused_imports)]
     #[test]
     fn prop_sbox_is_x5(x in any::<u64>()) {
         use poseidon_base::primitives::{Spec, P128Pow5T3};
@@ -263,6 +264,8 @@ proptest! {
 // Permutation Tests
 // =============================================================================
 
+#[allow(unused_imports)]
+#[allow(clippy::explicit_auto_deref)]
 #[test]
 fn test_permutation_full_state() {
     use poseidon_base::primitives::{permute, Spec, P128Pow5T3};
@@ -288,6 +291,7 @@ fn test_permutation_full_state() {
     }
 }
 
+#[allow(clippy::explicit_auto_deref)]
 #[test]
 fn test_permutation_deterministic() {
     use poseidon_base::primitives::{permute, P128Pow5T3};

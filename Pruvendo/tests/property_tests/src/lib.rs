@@ -41,3 +41,6 @@ mod params_tests;
 
 #[cfg(test)]
 mod timing_tests;
+
+#[cfg(test)]
+mod real_prover_tests;

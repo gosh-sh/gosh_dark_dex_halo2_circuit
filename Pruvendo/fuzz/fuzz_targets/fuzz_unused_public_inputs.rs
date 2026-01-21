@@ -21,7 +21,6 @@ use libfuzzer_sys::fuzz_target;
 use halo2_base::halo2_proofs::{
     dev::MockProver,
     halo2curves::bn256::Fr,
-    halo2curves::ff::Field,
 };
 use gosh_dark_dex_halo2_circuit::circuit::DarkDexCircuit;
 
@@ -66,7 +65,7 @@ fuzz_target!(|input: FuzzInput| {
     let delta = Fr::from(input.corrupt_delta);
     
     let mut public_inputs = vec![private_note_sum_fr, token_type_fr, digest];
-    public_inputs[corrupt_index] = public_inputs[corrupt_index] + delta;
+    public_inputs[corrupt_index] += delta;
     
     // Run MockProver with corrupted public input
     let prover = MockProver::run(CIRCUIT_K, &circuit, vec![public_inputs]);

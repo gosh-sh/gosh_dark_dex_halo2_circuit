@@ -56,11 +56,8 @@ fuzz_target!(|edge_case: EdgeCaseType| {
         EdgeCaseType::Random(sk, token, sum) => (sk, token, sum),
     };
 
-    // Пропускаем sk=0 - в новой архитектуре это валидный вход
-    // но может вызвать edge case в Poseidon
-    if sk_val == 0 {
-        return;
-    }
+    // NOTE: sk=0 теперь тестируется! (ранее фильтровался)
+    // Специализированный тест: fuzz_zero_sk_edge_case.rs
 
     // Проверяем что схема НЕ паникует на граничных случаях
     // Результат может быть Ok или Err, главное - не паника

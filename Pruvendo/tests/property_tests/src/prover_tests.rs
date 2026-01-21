@@ -8,11 +8,8 @@
 //! - Error handling behavior
 
 use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
-use halo2_proofs::poly::kzg::commitment::ParamsKZG;
 use halo2_proofs::poly::commitment::Params;
-use halo2_proofs::halo2curves::bn256::Bn256;
 use gosh_dark_dex_halo2_circuit::prover::*;
-use proptest::prelude::*;
 
 use crate::helpers::compute_sk_commitment;
 
@@ -147,7 +144,56 @@ fn test_read_kzg_params_nonexistent_file() {
     let result = std::panic::catch_unwind(|| {
         read_kzg_params("/nonexistent/path/to/params.bin".to_string())
     });
-    
+
     assert!(result.is_err(), "read_kzg_params should panic on nonexistent file");
+}
+
+// =============================================================================
+// File I/O Tests (setup_and_backup, generate_vk_and_backup)
+// =============================================================================
+
+#[test]
+fn test_setup_and_backup_kzg_params() {
+    use tempfile::NamedTempFile;
+
+    let temp_file = NamedTempFile::new().unwrap();
+    let path = temp_file.path().to_string_lossy().to_string();
+
+    // Should succeed and create file
+    setup_and_backup_kzg_params(4, path.clone());
+
+    // File should exist and have content
+    let content = std::fs::read(&path).unwrap();
+    assert!(!content.is_empty(), "KZG params file should not be empty");
+    println!("KZG params backup: {} bytes written", content.len());
+}
+
+#[test]
+fn test_generate_vk_and_backup() {
+    use tempfile::NamedTempFile;
+
+    let temp_file = NamedTempFile::new().unwrap();
+    let path = temp_file.path().to_string_lossy().to_string();
+
+    // k=8 required for new poseidon circuit
+    let params = setup(8);
+
+    // Should succeed and create file
+    generate_verififcation_key_without_witness_and_backup(&params, path.clone());
+
+    // File should exist and have content
+    let content = std::fs::read(&path).unwrap();
+    assert!(!content.is_empty(), "VK backup file should not be empty");
+    println!("VK backup: {} bytes written", content.len());
+}
+
+#[test]
+fn test_setup_and_backup_to_invalid_path() {
+    // Should panic on invalid path
+    let result = std::panic::catch_unwind(|| {
+        setup_and_backup_kzg_params(4, "/nonexistent/directory/params.bin".to_string())
+    });
+
+    assert!(result.is_err(), "Backup to invalid path should panic");
 }
 

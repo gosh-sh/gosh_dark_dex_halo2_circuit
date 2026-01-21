@@ -259,3 +259,12 @@ path = "fuzz_targets/fuzz_witness_unconstrained.rs"
 test = false
 doc = false
 bench = false
+
+# === NEW TARGET (2026-01-21): Zero SK Edge Case ===
+
+[[bin]]
+name = "fuzz_zero_sk_edge_case"
+path = "fuzz_targets/fuzz_zero_sk_edge_case.rs"
+test = false
+doc = false
+bench = false

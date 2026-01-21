@@ -29,18 +29,32 @@ DarkDEX использует Poseidon hash для вычисления `digest` 
 
 ## 2. Использование в схеме
 
+**Версия: poseidon_instead_of_ecc**
+
+Схема использует Poseidon hash в двух местах:
+
+### 2.1 sk_commitment (2 inputs)
 ```rust
-// src/circuit.rs, lines 441-445
-let hash = poseidon_hash_gadget(
-    config.poseidon_config,
-    layouter.namespace(|| "poseidon check"),
-    [key_data_sum, deposit_identifier_data_sum],
-)?;
+// sk_commitment = poseidon_hash([sk, 0])
+let sk_commitment = poseidon_hash([sk, Fr::zero()]);
 ```
 
-Где:
-- `key_data_sum = sk + Σ(pk.x limbs) + Σ(pk.y limbs)`
-- `deposit_identifier_data_sum = private_note_sum + token_type + vault_rand_val`
+### 2.2 digest (4 inputs)
+```rust
+// digest = poseidon_hash([sk_commitment, private_note_sum, token_type, sk])
+let digest = poseidon_hash([sk_commitment, private_note_sum, token_type, sk]);
+```
+
+### 2.3 Public Inputs
+```
+[0] private_note_sum  - сумма приватных нот
+[1] token_type        - тип токена
+[2] digest            - криптографический commitment
+```
+
+**Примечание:** Старая архитектура (до poseidon_instead_of_ecc) использовала
+`key_data_sum` и `deposit_identifier_data_sum` с ECC операциями.
+Эта версия упрощена и использует только Poseidon.
 
 ## 3. Результаты тестирования
 

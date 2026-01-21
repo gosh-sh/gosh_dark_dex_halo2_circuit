@@ -23,7 +23,6 @@ use libfuzzer_sys::fuzz_target;
 use halo2_base::halo2_proofs::{
     dev::MockProver,
     halo2curves::bn256::Fr,
-    halo2curves::ff::Field,
 };
 use gosh_dark_dex_halo2_circuit::circuit::DarkDexCircuit;
 

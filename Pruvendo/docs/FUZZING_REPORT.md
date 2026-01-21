@@ -1,10 +1,11 @@
 # Отчёт о фаззинге Dark DEX Halo2 Circuit
 
-**Версия:** 1.0  
-**Дата:** 2026-01-20  
-**Архитектура:** poseidon_instead_of_ecc  
-**Всего fuzz targets:** 31  
-**Результат smoke test:** 29/31 ✅, 2/31 ❌ (известные upstream баги)
+**Версия:** 2.0
+**Дата:** 2026-01-21
+**Архитектура:** poseidon_instead_of_ecc
+**Всего fuzz targets:** 32
+**Результат smoke test:** 30/32 ✅, 2/32 ❌ (известные upstream баги)
+**Test Profiles:** см. [TEST_PROFILES.md](./TEST_PROFILES.md)
 
 ---
 
@@ -93,10 +94,22 @@ cargo +nightly fuzz run --fuzz-dir Pruvendo/fuzz <target_name> -- -runs=0
 **Результат:** ✅ PASS
 
 #### fuzz_edge_cases
-**Свойство:** Обработка граничных случаев без паники  
-**Описание:** Тестирует: sk=0, sk=1, sk=MAX, token=0, sum=0, все MAX.  
-**Критичность:** Средняя - паники не должно быть на любых входах.  
+**Свойство:** Обработка граничных случаев без паники
+**Описание:** Тестирует: sk=0, sk=1, sk=MAX, token=0, sum=0, все MAX.
+**Критичность:** Средняя - паники не должно быть на любых входах.
 **Результат:** ✅ PASS
+
+#### fuzz_zero_sk_edge_case *(NEW 2026-01-21)*
+**Свойство:** Корректная обработка sk=0
+**Описание:** Специализированный тест для граничного случая sk=0. Проверяет 6 вариантов:
+- ZeroSkRandomOthers: sk=0 с случайными token/sum
+- AllZeroExceptSum: sk=0, token=0, случайный sum
+- AllZeroExceptToken: sk=0, sum=0, случайный token
+- AllZero: все значения = 0
+- ZeroSkLargeValues: sk=0 с большими значениями
+- CompareZeroVsOne: commitment(sk=0) ≠ commitment(sk=1)
+**Критичность:** Высокая - sk=0 ранее фильтровался, теперь тестируется.
+**Результат:** ✅ PASS (ожидается)
 
 #### fuzz_field_wrap
 **Свойство:** Корректная арифметика около модуля поля Fr  
@@ -395,5 +408,6 @@ pub fn reference_poseidon_hash_2(inputs: [Fr; 2]) -> Fr {
 | 29 | fuzz_witness_manipulation | Attack | ✅ |
 | 30 | fuzz_witness_unconstrained | P0 | ✅ |
 | 31 | fuzz_zero_padding_security | Digest | ✅ |
+| 32 | fuzz_zero_sk_edge_case | Core | ✅ |
 
 

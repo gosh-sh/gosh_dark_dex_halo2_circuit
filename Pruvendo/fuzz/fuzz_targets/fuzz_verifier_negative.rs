@@ -13,12 +13,10 @@
 use libfuzzer_sys::fuzz_target;
 use arbitrary::Arbitrary;
 
-/// Minimum VK size - halo2 VK is complex structure with:
-/// - Domain info
-/// - Fixed commitments
-/// - Permutation VK
-/// Real VK is typically ~1KB+
-const MIN_VK_SIZE: usize = 256;
+// Note: Minimum VK size for halo2 is typically ~1KB+ due to:
+// - Domain info
+// - Fixed commitments
+// - Permutation VK
 
 #[derive(Arbitrary, Debug)]
 struct FuzzInput {

@@ -9,9 +9,8 @@
 //! - Cross-transaction attacks
 
 use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
-use halo2_base::halo2_proofs::halo2curves::ff::PrimeField;
 use halo2_base::halo2_proofs::dev::MockProver;
-use gosh_dark_dex_halo2_circuit::circuit::{DarkDexCircuit, poseidon_hash};
+use gosh_dark_dex_halo2_circuit::circuit::DarkDexCircuit;
 use proptest::prelude::*;
 use std::collections::HashMap;
 
@@ -54,7 +53,7 @@ fn create_and_verify_circuit(
 #[test]
 fn test_multi_user_independent_proofs() {
     // Несколько пользователей с разными sk
-    let users = vec![
+    let users = [
         (1u64, 1u64, 1000u64),      // User 1
         (42u64, 2u64, 2000u64),     // User 2
         (999u64, 3u64, 3000u64),    // User 3
@@ -73,7 +72,7 @@ fn test_same_user_different_transactions() {
     // Один пользователь делает несколько транзакций
     let sk_val = 12345u64;
 
-    let transactions = vec![
+    let transactions = [
         (1u64, 1000u64),   // Tx 1
         (1u64, 2000u64),   // Tx 2: same token, different sum
         (2u64, 1000u64),   // Tx 3: different token
@@ -146,7 +145,7 @@ fn test_replay_attack_different_token_rejected() {
 fn test_cross_user_commitment_swap_rejected() {
     // User A
     let sk_a = Fr::from(111u64);
-    let sk_a_commitment = compute_sk_commitment(sk_a);
+    let _sk_a_commitment = compute_sk_commitment(sk_a);
 
     // User B
     let sk_b = Fr::from(222u64);

@@ -15,9 +15,10 @@
 //! ОТЛИЧИЕ от fuzz_digest_collision:
 //! - fuzz_digest_collision: ищет любые коллизии между двумя наборами inputs
 //! - fuzz_digest_preimage: дополнительно проверяет PARTIAL COLLISIONS:
-//!   * Разные sk, одинаковые token/sum → должны давать разные digests
-//!   * Одинаковый sk, разные token/sum → должны давать разные digests
-//!   Это тестирует binding свойства каждого компонента отдельно.
+//!   - Разные sk, одинаковые token/sum → должны давать разные digests
+//!   - Одинаковый sk, разные token/sum → должны давать разные digests
+//!
+//! Это тестирует binding свойства каждого компонента отдельно.
 
 #![no_main]
 

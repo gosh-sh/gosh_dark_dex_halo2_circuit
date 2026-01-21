@@ -10,13 +10,10 @@
 use libfuzzer_sys::fuzz_target;
 use arbitrary::Arbitrary;
 
-use halo2_base::halo2_proofs::halo2curves::{
-    bn256::Fr,
-    ff::Field,
-};
+use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 
 mod common;
-use common::{poseidon_hash, compute_sk_commitment, compute_digest};
+use common::{compute_sk_commitment, compute_digest};
 
 #[derive(Arbitrary, Debug)]
 struct FieldWrapInput {

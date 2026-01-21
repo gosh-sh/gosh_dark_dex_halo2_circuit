@@ -13,10 +13,7 @@ use gosh_dark_dex_halo2_circuit::circuit::DarkDexCircuit;
 pub use gosh_dark_dex_halo2_circuit::circuit::poseidon_hash;
 use halo2_base::halo2_proofs::{
     dev::MockProver,
-    halo2curves::{
-        bn256::Fr,
-        ff::Field,
-    },
+    halo2curves::bn256::Fr,
 };
 use std::sync::Once;
 
@@ -38,9 +35,8 @@ pub const CIRCUIT_K: u32 = 8;
 // - Для L > RATE: absorb по RATE элементов, permute между absorb
 // - Output = state[0] после финальной permutation
 
-use poseidon_base::primitives::{permute, P128Pow5T3, P128Pow5T3Compact, ConstantLength, Spec};
+use poseidon_base::primitives::{permute, P128Pow5T3};
 use poseidon_base::primitives::bn256::fp::{ROUND_CONSTANTS, MDS};
-use poseidon_base::primitives::Hash as PoseidonHashPrimitive;
 
 /// Вычисляет capacity element для ConstantLength<L>
 /// capacity = L * 2^64 (согласно ePrint 2019/458 section 4.2)
@@ -62,7 +58,9 @@ pub fn reference_poseidon_hash_2(inputs: [Fr; 2]) -> Fr {
     let mut state = [inputs[0], inputs[1], capacity];
 
     // Apply permutation
+    #[allow(clippy::explicit_auto_deref)]
     let rc: &[[Fr; 3]] = &*ROUND_CONSTANTS;
+    #[allow(clippy::explicit_auto_deref)]
     let mds: &[[Fr; 3]; 3] = &*MDS;
 
     permute::<Fr, P128Pow5T3<Fr>, 3, 2>(&mut state, mds, rc);
@@ -78,7 +76,9 @@ pub fn reference_poseidon_hash_4(inputs: [Fr; 4]) -> Fr {
     let capacity = compute_capacity(4);
     let mut state = [inputs[0], inputs[1], capacity];
 
+    #[allow(clippy::explicit_auto_deref)]
     let rc: &[[Fr; 3]] = &*ROUND_CONSTANTS;
+    #[allow(clippy::explicit_auto_deref)]
     let mds: &[[Fr; 3]; 3] = &*MDS;
 
     // Phase 1: permute с первыми 2 элементами

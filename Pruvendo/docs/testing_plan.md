@@ -1,9 +1,10 @@
 # План тестирования Dark DEX Halo2 Circuit
 
-**Версия:** 7.0
-**Обновлено:** 2026-01-20
+**Версия:** 8.0
+**Обновлено:** 2026-01-21
 **Архитектура:** poseidon_instead_of_ecc
 **Best Practices:** см. [ZK_AUDIT_BEST_PRACTICES.md](./ZK_AUDIT_BEST_PRACTICES.md)
+**Test Profiles:** см. [TEST_PROFILES.md](./TEST_PROFILES.md)
 
 ---
 
@@ -11,11 +12,12 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Fuzz Targets | 31 (29 stable + 2 known BC) |
-| Property Tests | 116 |
+| Fuzz Targets | 32 (30 stable + 2 known BC) |
+| Property Tests | 130+ |
+| Real Prover Tests | 12 |
 | Integration Tests | 13 |
 | Bug Candidates | 4 open, 3 closed |
-| Smoke Test | ✅ 29/31 passed (2 known BC) |
+| Smoke Test | ✅ 30/32 passed (2 known BC) |
 
 **Подробный статус**: см. [COVERAGE_STATUS.md](./COVERAGE_STATUS.md)
 
@@ -56,6 +58,17 @@
 | Удаление ECC targets | ✅ 16 удалено |
 | Обновление BC статусов | ✅ 3 закрыты |
 
+### ✅ Фаза 7: Мета-аудит улучшения (2026-01-21)
+
+| Задача | Статус |
+|--------|--------|
+| Добавить fuzz_zero_sk_edge_case | ✅ Новый target |
+| Унифицировать диапазоны в property tests | ✅ Full u64 range |
+| Добавить Fr boundary property tests | ✅ 5 тестов |
+| Добавить Real prover tests | ✅ 12 тестов |
+| Создать систему профилей (day/night) | ✅ Скрипты + docs |
+| Синхронизировать документацию | ✅ Числа выровнены |
+
 ---
 
 ## Bug Candidates
@@ -72,9 +85,9 @@
 
 ---
 
-## Fuzz Targets (31)
+## Fuzz Targets (32)
 
-### Core (9)
+### Core (10)
 - fuzz_completeness
 - fuzz_determinism
 - fuzz_soundness
@@ -84,6 +97,7 @@
 - fuzz_token_binding
 - fuzz_proof_replay
 - fuzz_public_input_mismatch
+- fuzz_zero_sk_edge_case *(NEW 2026-01-21)*
 
 ### Poseidon (5)
 - fuzz_poseidon_consistency (cross-validation)

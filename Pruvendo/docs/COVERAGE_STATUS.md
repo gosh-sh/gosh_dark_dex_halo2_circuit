@@ -1,8 +1,9 @@
 # DarkDex Protocol Test Coverage Status
 
-**Дата**: 2026-01-19
-**Версия**: 3.0
+**Дата**: 2026-01-21
+**Версия**: 4.0
 **Архитектура**: poseidon_instead_of_ecc
+**Test Profiles**: см. [TEST_PROFILES.md](./TEST_PROFILES.md)
 
 ## Легенда
 
@@ -106,6 +107,7 @@
 
 ## См. также
 
-- [TESTING_PLAN.md](./TESTING_PLAN.md)
-- [BUG_CANDIDATES.md](./BUG_CANDIDATES.md)
+- [testing_plan.md](./testing_plan.md)
+- [BC_TRACKING.md](./BC_TRACKING.md)
+- [AUDIT_FINDINGS.md](./AUDIT_FINDINGS.md)
 

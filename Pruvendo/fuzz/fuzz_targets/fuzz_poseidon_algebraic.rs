@@ -14,10 +14,7 @@ mod common;
 
 use common::poseidon_hash;
 use libfuzzer_sys::fuzz_target;
-use halo2_base::halo2_proofs::halo2curves::{
-    bn256::Fr,
-    ff::{PrimeField, Field},
-};
+use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 
 fuzz_target!(|data: &[u8]| {
     if data.len() < 32 {

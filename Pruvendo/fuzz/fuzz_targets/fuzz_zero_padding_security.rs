@@ -14,7 +14,7 @@ use arbitrary::Arbitrary;
 mod common;
 use common::{compute_sk_commitment, poseidon_hash};
 
-use halo2_base::halo2_proofs::halo2curves::{bn256::Fr, ff::Field};
+use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 
 #[derive(Arbitrary, Debug)]
 struct ZeroPaddingInput {

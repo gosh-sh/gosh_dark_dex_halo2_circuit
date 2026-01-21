@@ -10,7 +10,6 @@
 //! - Preimage resistance
 
 use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
-use halo2_base::halo2_proofs::halo2curves::ff::{Field, PrimeField};
 use proptest::prelude::*;
 use gosh_dark_dex_halo2_circuit::circuit::poseidon_hash;
 

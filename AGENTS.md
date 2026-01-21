@@ -75,3 +75,91 @@ pub const BUG_007: BugInfo = ...;
 // "BUG-007: deposit_sum collision"
 ```
 
+## Tool Usage Instructions
+
+### Fuzzing
+
+Fuzz tests are located in `Pruvendo/fuzz/`. There is a symlink `fuzz -> Pruvendo/fuzz` in the project root.
+
+**Run fuzzing from the project root:**
+```bash
+# List all fuzz targets
+cargo +nightly fuzz list --fuzz-dir Pruvendo/fuzz
+
+# Run a specific target (e.g., 1000 runs)
+cargo +nightly fuzz run --fuzz-dir Pruvendo/fuzz fuzz_determinism -- -runs=1000
+
+# Run with time limit (e.g., 60 seconds)
+cargo +nightly fuzz run --fuzz-dir Pruvendo/fuzz fuzz_soundness -- -max_total_time=60
+
+# Quick smoke test of all targets
+./Pruvendo/fuzz/quick_smoke_test.sh
+
+# Overnight fuzzing
+./Pruvendo/fuzz/run_overnight.sh
+```
+
+**Important:** Always run from the project root directory, not from `Pruvendo/fuzz/`.
+
+### Apalache (Bounded Model Checking)
+
+Apalache is installed in `Pruvendo/external_packages/apalache/`. It requires Java 17+.
+
+**Setup Java (if not in PATH):**
+```bash
+export JAVA_HOME="/usr/local/opt/openjdk@17"
+export PATH="$JAVA_HOME/bin:$PATH"
+```
+
+**Run Apalache verification via Quint:**
+```bash
+export APALACHE_DIST="$(pwd)/Pruvendo/external_packages/apalache/apalache"
+
+# Verify a specific invariant
+quint verify --init=init --step=step --invariant=inv_dex_non_negative --max-steps=10 \
+  Pruvendo/models/dark_dex_protocol.qnt
+
+# Available invariants:
+# - inv_dex_non_negative
+# - inv_owner_only
+# - inv_no_double_withdraw
+# - inv_unique_digests
+# - inv_total_conservation
+```
+
+**Run Quint random simulation (faster, not exhaustive):**
+```bash
+quint run --init=init --step=step --invariant=inv_dex_non_negative \
+  --max-samples=1000 --max-steps=20 Pruvendo/models/dark_dex_protocol.qnt
+```
+
+### Property Tests
+
+Property tests are in `Pruvendo/tests/property_tests/`.
+
+```bash
+cd Pruvendo/tests/property_tests
+
+# Run all property tests
+cargo test --release
+
+# Run specific test
+cargo test --release prop_valid_sk
+
+# Run with verbose output
+cargo test --release -- --nocapture
+```
+
+### Code Coverage
+
+```bash
+cd Pruvendo/tests/property_tests
+
+# Text report
+cargo llvm-cov --text
+
+# HTML report
+cargo llvm-cov --html --output-dir coverage/
+
+# Note: May take several minutes due to compilation with instrumentation
+```

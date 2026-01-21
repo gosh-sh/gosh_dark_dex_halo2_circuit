@@ -11,7 +11,7 @@ use libfuzzer_sys::fuzz_target;
 use arbitrary::Arbitrary;
 
 mod common;
-use common::{compute_sk_commitment, compute_digest};
+use common::compute_digest;
 
 use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 

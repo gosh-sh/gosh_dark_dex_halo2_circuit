@@ -55,16 +55,42 @@ cargo test --release
 > **ВАЖНО**: После рефакторинга `poseidon_instead_of_ecc` многие BC были закрыты!
 > Circuit больше не использует ECC операции, vault_rand_val убран.
 
-| ID | Название | Severity | Текущий статус |
-|----|----------|----------|----------------|
-| BC-001 | Panic при corrupted VK bytes | Medium | ⚠️ Актуален (upstream halo2curves) |
-| ~~BC-002~~ | ~~Panic при g = identity point~~ | ~~Medium~~ | ❌ **CLOSED** - ECC убран из circuit |
-| BC-003 | shl_overflow при corrupted KZG header | Medium | ⚠️ Актуален (upstream halo2_proofs) |
-| ~~BC-004~~ | ~~shl_overflow в commitment.rs (limbs)~~ | ~~Medium~~ | ❌ **CLOSED** - limbs decomposition убран |
-| BC-005 | shl_overflow в domain.rs | Medium | Дубликат BC-003 (upstream) |
-| BC-006 | Non-canonical field elements | Low | ✅ Not a soundness issue |
-| ~~BC-007~~ | ~~deposit_sum коллизии~~ | ~~Low~~ | ❌ **CLOSED** - vault_rand_val убран |
-| ~~BC-008~~ | ~~Split с одинаковыми amounts~~ | ~~Low~~ | ❌ NOT A BUG (model artifact) |
+| ID | Название | Severity | Текущий статус | Последняя верификация |
+|----|----------|----------|----------------|----------------------|
+| BC-001 | Panic при corrupted VK bytes | Medium | ⚠️ Актуален (upstream halo2curves) | ✅ 2026-01-21: воспроизводится |
+| ~~BC-002~~ | ~~Panic при g = identity point~~ | ~~Medium~~ | ❌ **CLOSED** - ECC убран из circuit | N/A |
+| BC-003 | shl_overflow при corrupted KZG header | Medium | ⚠️ Актуален (upstream halo2_proofs) | ✅ 2026-01-21: воспроизводится |
+| ~~BC-004~~ | ~~shl_overflow в commitment.rs (limbs)~~ | ~~Medium~~ | ❌ **CLOSED** - limbs decomposition убран | N/A |
+| BC-005 | shl_overflow в domain.rs | Medium | Дубликат BC-003 (upstream) | = BC-003 |
+| BC-006 | Non-canonical field elements | Low | ✅ NOT A SOUNDNESS ISSUE | Informational |
+| ~~BC-007~~ | ~~deposit_sum коллизии~~ | ~~Low~~ | ❌ **CLOSED** - vault_rand_val убран | N/A |
+| ~~BC-008~~ | ~~Split с одинаковыми amounts~~ | ~~Low~~ | ❌ NOT A BUG (model artifact) | N/A |
+
+### Результаты верификации 2026-01-21
+
+```
+BC-001: test_vk_corrupted_single_byte
+  → panic at halo2curves "called Result::unwrap() on Err"
+  → REPRODUCED (upstream issue)
+
+BC-003: test_params_corrupted_k_value
+  → panic "capacity overflow" при попытке аллокации с corrupted k
+  → REPRODUCED (upstream issue)
+
+BC-003: test_read_params_corrupted_file
+  → panic at halo2curves/bn256/fq.rs "UnexpectedEof"
+  → REPRODUCED (upstream issue)
+
+BC-006: Non-canonical field elements
+  → Elements are reduced during arithmetic operations
+  → NOT A SOUNDNESS ISSUE (informational)
+```
+
+**Тесты для воспроизведения:**
+```bash
+cd Pruvendo/tests/property_tests
+cargo test --release -- --nocapture corrupted
+```
 
 ## Детали каждого Bug Candidate
 
@@ -186,3 +212,10 @@ cargo test test_generator_identity --release
 cargo test --release -- --ignored 2>&1 | grep -E "STATUS:|passed|failed"
 ```
 
+---
+
+## Связанные документы
+
+- [TIMING_ANALYSIS.md](./TIMING_ANALYSIS.md) — анализ timing side-channels
+- [FUZZING_REPORT.md](./FUZZING_REPORT.md) — результаты фаззинга
+- [AUDIT_FINDINGS.md](./AUDIT_FINDINGS.md) — общие находки аудита

@@ -118,7 +118,7 @@ fn test_params_k_1() {
     
     let mut buf = Vec::new();
     params.write_custom(&mut buf, SerdeFormat::RawBytesUnchecked).unwrap();
-    assert!(buf.len() > 0, "k=1 params should have non-zero size");
+    assert!(!buf.is_empty(), "k=1 params should have non-zero size");
 }
 
 #[test]

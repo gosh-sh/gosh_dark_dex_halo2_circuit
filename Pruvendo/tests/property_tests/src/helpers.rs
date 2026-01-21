@@ -155,8 +155,8 @@ pub fn check_circuit_with_wrong_commitment(
 // Функции для полного proof/verify flow
 // ============================================================
 
-use gosh_dark_dex_halo2_circuit::prover::{generate_proof, read_kzg_params};
-use gosh_dark_dex_halo2_circuit::verifier::{verification_key_from_path, verify_proof_};
+use gosh_dark_dex_halo2_circuit::prover::{generate_proof, read_kzg_params, generate_verififcation_key_without_witness};
+use gosh_dark_dex_halo2_circuit::verifier::verify_proof_;
 
 /// Результат верификации proof
 #[derive(Debug, Clone, PartialEq)]
@@ -193,6 +193,10 @@ pub fn compute_public_inputs(
 }
 
 /// Генерирует proof и верифицирует его с теми же public inputs
+///
+/// ВАЖНО: Используем generate_verififcation_key_without_witness вместо
+/// verification_key_from_path, т.к. сериализованный VK несовместим
+/// с VK созданным при генерации proof.
 pub fn generate_and_verify_proof(
     sk: Fr,
     token_type: u64,
@@ -201,7 +205,8 @@ pub fn generate_and_verify_proof(
     ensure_working_directory();
 
     let params = read_kzg_params("kzg_params.bin".to_string());
-    let vk = verification_key_from_path("verification_key.bin".to_string());
+    // Создаём VK "on the fly" - это гарантирует совместимость с proof
+    let vk = generate_verififcation_key_without_witness(&params);
 
     let sk_commitment = compute_sk_commitment(sk);
     let mut pub_inputs = compute_public_inputs(sk, token_type, private_note_sum);
@@ -247,6 +252,9 @@ pub fn generate_proof_with_pub_inputs(
 }
 
 /// Верифицирует заданный proof с заданными public inputs
+///
+/// ВАЖНО: Используем generate_verififcation_key_without_witness вместо
+/// verification_key_from_path для совместимости с proof.
 pub fn verify_existing_proof_with_pub_inputs(
     proof: &[u8],
     pub_inputs: Vec<Fr>,
@@ -254,7 +262,8 @@ pub fn verify_existing_proof_with_pub_inputs(
     ensure_working_directory();
 
     let params = read_kzg_params("kzg_params.bin".to_string());
-    let vk = verification_key_from_path("verification_key.bin".to_string());
+    // Создаём VK "on the fly" - это гарантирует совместимость с proof
+    let vk = generate_verififcation_key_without_witness(&params);
 
     if verify_proof_(&params, proof, &vk, pub_inputs) {
         VerifyResult::Valid

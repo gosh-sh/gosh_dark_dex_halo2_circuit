@@ -67,10 +67,10 @@ fn test_vk_from_path_empty_string() {
 fn test_verify_with_empty_proof() {
     // Test verify_proof_ with empty proof - needs params and VK
     // This is a documentation test - actual test requires full setup
-    
+
     // Empty proof should be rejected
-    let empty_proof: Vec<u8> = vec![];
-    
+    let _empty_proof: Vec<u8> = vec![];
+
     // We can't easily test this without valid VK and params,
     // but we document the expected behavior
     println!("verify_proof_ with empty proof: expected to return false or panic");
@@ -123,10 +123,132 @@ fn test_vk_from_bytes_truncated() {
     // Set some bytes to non-zero to avoid trivial rejection
     truncated[0] = 0x01;
     truncated[10] = 0x42;
-    
+
     let result = std::panic::catch_unwind(|| {
         verification_key_from_bytes(&truncated)
     });
     assert!(result.is_err(), "Truncated VK should panic");
 }
 
+// =============================================================================
+// Full verify_proof_ Tests (expensive - require complete setup)
+// =============================================================================
+
+#[test]
+fn test_verify_proof_with_valid_inputs() {
+    use gosh_dark_dex_halo2_circuit::prover::{setup, generate_proof, generate_verififcation_key_without_witness};
+    use crate::helpers::{compute_sk_commitment, compute_digest};
+
+    // k=8 for poseidon-only circuit
+    let params = setup(8);
+
+    let sk = Fr::from(12345u64);
+    let sk_commitment = compute_sk_commitment(sk);
+    let token_type = Fr::from(1u64);
+    let private_note_sum = Fr::from(1000u64);
+
+    // Compute expected digest using helper
+    let digest = compute_digest(sk, token_type, private_note_sum);
+
+    // Public inputs: [private_note_sum, token_type, digest]
+    let mut pub_inputs = vec![private_note_sum, token_type, digest];
+
+    // Generate proof
+    let proof = generate_proof(
+        &params,
+        Some(token_type),
+        Some(private_note_sum),
+        Some(sk),
+        Some(sk_commitment),
+        &mut pub_inputs,
+    );
+
+    // Generate VK
+    let vk = generate_verififcation_key_without_witness(&params);
+
+    // Verify
+    let result = verify_proof_(&params, &proof, &vk, pub_inputs);
+    assert!(result, "Valid proof should verify");
+}
+
+#[test]
+fn test_verify_proof_with_wrong_digest() {
+    use gosh_dark_dex_halo2_circuit::prover::{setup, generate_proof, generate_verififcation_key_without_witness};
+    use crate::helpers::{compute_sk_commitment, compute_digest};
+
+    let params = setup(8);
+
+    let sk = Fr::from(12345u64);
+    let sk_commitment = compute_sk_commitment(sk);
+    let token_type = Fr::from(1u64);
+    let private_note_sum = Fr::from(1000u64);
+
+    // Correct digest for proof generation
+    let digest = compute_digest(sk, token_type, private_note_sum);
+    let mut pub_inputs_for_proof = vec![private_note_sum, token_type, digest];
+
+    // Generate proof with correct digest
+    let proof = generate_proof(
+        &params,
+        Some(token_type),
+        Some(private_note_sum),
+        Some(sk),
+        Some(sk_commitment),
+        &mut pub_inputs_for_proof,
+    );
+
+    let vk = generate_verififcation_key_without_witness(&params);
+
+    // Verify with WRONG digest
+    let wrong_digest = Fr::from(999999u64);
+    let wrong_pub_inputs = vec![private_note_sum, token_type, wrong_digest];
+
+    let result = verify_proof_(&params, &proof, &vk, wrong_pub_inputs);
+    assert!(!result, "Proof with wrong digest should NOT verify");
+}
+
+#[test]
+fn test_verify_proof_with_corrupted_proof() {
+    use gosh_dark_dex_halo2_circuit::prover::{setup, generate_proof, generate_verififcation_key_without_witness};
+    use crate::helpers::{compute_sk_commitment, compute_digest};
+
+    let params = setup(8);
+
+    let sk = Fr::from(12345u64);
+    let sk_commitment = compute_sk_commitment(sk);
+    let token_type = Fr::from(1u64);
+    let private_note_sum = Fr::from(1000u64);
+
+    let digest = compute_digest(sk, token_type, private_note_sum);
+    let pub_inputs = vec![private_note_sum, token_type, digest];
+
+    // Generate valid proof
+    let mut proof = generate_proof(
+        &params,
+        Some(token_type),
+        Some(private_note_sum),
+        Some(sk),
+        Some(sk_commitment),
+        &mut pub_inputs.clone(),
+    );
+
+    let vk = generate_verififcation_key_without_witness(&params);
+
+    // Corrupt the proof
+    if !proof.is_empty() {
+        proof[0] ^= 0xFF;
+        let mid = proof.len() / 2;
+        proof[mid] ^= 0xFF;
+    }
+
+    // Verify should fail (may panic or return false)
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        verify_proof_(&params, &proof, &vk, pub_inputs)
+    }));
+
+    match result {
+        Ok(false) => println!("Corrupted proof correctly rejected"),
+        Ok(true) => panic!("Corrupted proof should NOT verify!"),
+        Err(_) => println!("Corrupted proof caused panic (acceptable)"),
+    }
+}
