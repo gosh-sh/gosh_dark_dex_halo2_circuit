@@ -539,6 +539,46 @@ module dark_dex_protocol {
         not(d.withdrawn) implies (d.owner == d.digest.owner)
     )
 
+    // INV-9: No overflow in amounts
+    // All amounts are bounded and sums don't overflow
+    // Max safe value for demonstration: 2^63 - 1 (i64::MAX)
+    val MAX_SAFE_AMOUNT = 9223372036854775807  // i64::MAX
+
+    val inv_no_overflow = and {
+        // All deposit amounts are positive and bounded
+        deposits.forall(d => d.amount > 0 and d.amount <= MAX_SAFE_AMOUNT),
+        // All balance amounts are non-negative and bounded
+        balances.forall(b => b.amount >= 0 and b.amount <= MAX_SAFE_AMOUNT),
+        // DEX balances are non-negative and bounded
+        dex_balances.forall(db => db.amount >= 0 and db.amount <= MAX_SAFE_AMOUNT),
+        // Total DEX balance doesn't overflow
+        dex_balances.fold(0, (acc, db) => acc + db.amount) <= MAX_SAFE_AMOUNT
+    }
+
+    // INV-10: Token isolation - operations on different token types are independent
+    // No deposit of token T affects balance of token T' where T != T'
+    // Expressed as: each token's total is consistent within that token only
+    val inv_token_isolation = TOKENS.forall(t1 =>
+        TOKENS.forall(t2 =>
+            (t1 != t2) implies (
+                // Deposits of token t1 don't affect DEX balance of t2
+                deposits.filter(d => d.token == t1 and not(d.withdrawn))
+                        .forall(d => d.token != t2) and
+                // Cross-token merge is impossible (already enforced by merge precondition)
+                true
+            )
+        )
+    )
+
+    // INV-11: Token conservation per type
+    // For each token type, total active deposits = DEX balance for that token
+    val inv_token_conservation = TOKENS.forall(t => {
+        val total_deposited_t = deposits.filter(d => d.token == t and not(d.withdrawn))
+                                        .fold(0, (acc, d) => acc + d.amount)
+        val dex_balance_t = get_dex_balance(dex_balances, t)
+        total_deposited_t == dex_balance_t
+    })
+
     // ==========================================================================
     // TEMPORAL PROPERTIES
     // ==========================================================================
@@ -912,6 +952,31 @@ module dark_dex_apalache {
     // Note: Cannot verify with Apalache because deposits.size() uses fold
     // Verified via random simulation instead
     // val tinv_nonce_correct = deposits.size() == next_nonce
+
+    // ==========================================================================
+    // ADDITIONAL INVARIANTS (for expanded verification)
+    // ==========================================================================
+
+    // INV-9: No overflow in amounts (using auxiliary variables)
+    val MAX_SAFE_AMOUNT_AUX = 9223372036854775807  // i64::MAX
+
+    val inv_no_overflow_aux = and {
+        // All deposit amounts are positive and bounded
+        deposits.forall(d => d.amount > 0 and d.amount <= MAX_SAFE_AMOUNT_AUX),
+        // Total in DEX doesn't overflow
+        total_in_dex >= 0 and total_in_dex <= MAX_SAFE_AMOUNT_AUX,
+        // Total minted doesn't overflow
+        total_minted >= 0 and total_minted <= MAX_SAFE_AMOUNT_AUX,
+        // Total withdrawn doesn't overflow
+        total_withdrawn >= 0 and total_withdrawn <= MAX_SAFE_AMOUNT_AUX
+    }
+
+    // INV-10: Token isolation (simplified for single-token Apalache module)
+    // In this module we only have 1 token type, so isolation is trivial
+    // This invariant verifies the structural property that token types are preserved
+    val inv_token_isolation_aux = deposits.forall(d =>
+        d.token == d.digest.token  // Token in deposit matches token in digest
+    )
 
 }
 

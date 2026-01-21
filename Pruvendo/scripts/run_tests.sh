@@ -112,6 +112,9 @@ run_apalache() {
         "inv_no_double_withdraw"
         "inv_unique_digests"
         "inv_conservation"
+        "inv_no_overflow"
+        "inv_token_isolation"
+        "inv_token_conservation"
     )
     
     for inv in "${INVARIANTS[@]}"; do

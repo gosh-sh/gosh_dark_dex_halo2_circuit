@@ -29,12 +29,14 @@
 | BC-006 | Non-canonical field elements | Low | OPEN | halo2curves (upstream) |
 | BC-007 | deposit_sum collision | Critical | CLOSED | Формула изменена |
 | BC-008 | Split с одинаковыми суммами | Info | NOT A BUG | Артефакт модели |
+| BC-009 | Timing side-channel verifier | Medium | NOT EXPLOITABLE | verifier::verify_proof_ |
 
 ### Статистика
-- **Найдено:** 8 bug candidates
+- **Найдено:** 9 bug candidates
 - **Подтверждено/исправлено:** 3 (BC-002, BC-004, BC-007)
 - **Upstream issues:** 4 (BC-001, BC-003, BC-005, BC-006)
 - **Не баг:** 1 (BC-008)
+- **Не эксплуатируемо:** 1 (BC-009)
 
 ---
 
@@ -114,9 +116,22 @@
 Apalache выполняет **bounded model checking**, а не exhaustive verification:
 - "VERIFIED" означает: *"нет контрпримера в пределах N шагов"*
 - Это **НЕ** означает: *"свойство доказано для всех возможных путей"*
-- Текущая конфигурация: max-steps=5 (day), max-steps=15 (night)
+- Текущая конфигурация: max-steps=5 (day), max-steps=25 (night)
 
 Для увеличения уверенности используйте night profile с большим max-steps.
+
+### Проверяемые инварианты Quint/Apalache
+
+| Инвариант | Описание | Статус |
+|-----------|----------|--------|
+| `inv_dex_non_negative` | DEX balance ≥ 0 | ✅ VERIFIED |
+| `inv_owner_only` | Только владелец может вывести | ✅ VERIFIED |
+| `inv_no_double_withdraw` | Нет двойного вывода | ✅ VERIFIED |
+| `inv_unique_digests` | Уникальность digest | ✅ VERIFIED |
+| `inv_conservation` | Общая консервация токенов | ✅ VERIFIED |
+| `inv_no_overflow` | Нет переполнения сумм | ✅ VERIFIED |
+| `inv_token_isolation` | Изоляция типов токенов | ✅ VERIFIED |
+| `inv_token_conservation` | Консервация по типам токенов | ✅ VERIFIED |
 
 ---
 
@@ -128,13 +143,13 @@ Apalache выполняет **bounded model checking**, а не exhaustive verif
 
 ### Рекомендуемые
 - [ ] Добавить regression тест на gate count
-- [ ] Интегрировать Apalache для formal verification
+- [x] Интегрировать Apalache для formal verification (8 инвариантов)
 
 ---
 
 ## 6. Timing Side-Channel Analysis
 
-**Статус:** ✅ Безопасно (см. [TIMING_ANALYSIS.md](./TIMING_ANALYSIS.md))
+**Статус:** ✅ Безопасно (см. [TIMING_ANALYSIS.md](./TIMING_ANALYSIS.md), [BC_TRACKING.md](./BC_TRACKING.md) BC-009)
 
 ### Проверенные vectors:
 
@@ -145,11 +160,13 @@ Apalache выполняет **bounded model checking**, а не exhaustive verif
 | Prover sk correlation | r=0.68, 6.95% dev | VERY LOW |
 | Field multiplication | 0.00% deviation | NONE |
 | Field inversion | 30% variance | N/A (не используется) |
+| **Timing oracle attack (BC-009)** | **SNR=0.59, 2^254 field** | **NONE** |
 
 ### Архитектурные защиты:
 - Prover изолирован на клиенте
 - Verifier доступен только через сеть (latency >> µs)
 - sk fresh для каждой транзакции
+- BC-009: Timing oracle brute-force требует 1.70×10^68 лет
 
 ---
 

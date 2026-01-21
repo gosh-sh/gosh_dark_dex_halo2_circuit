@@ -63,8 +63,9 @@ cargo test --release
 | ~~BC-004~~ | ~~shl_overflow в commitment.rs (limbs)~~ | ~~Medium~~ | ❌ **CLOSED** - limbs decomposition убран | N/A |
 | BC-005 | shl_overflow в domain.rs | Medium | Дубликат BC-003 (upstream) | = BC-003 |
 | BC-006 | Non-canonical field elements | Low | ✅ NOT A SOUNDNESS ISSUE | Informational |
-| ~~BC-007~~ | ~~deposit_sum коллизии~~ | ~~Low~~ | ❌ **CLOSED** - vault_rand_val убран | N/A |
+| ~~BC-007~~ | ~~deposit_sum/vault_rand_val коллизии~~ | ~~Low~~ | ❌ **CLOSED** - vault_rand_val убран | N/A |
 | ~~BC-008~~ | ~~Split с одинаковыми amounts~~ | ~~Low~~ | ❌ NOT A BUG (model artifact) | N/A |
+| BC-009 | Timing side-channel в verifier | Medium | ✅ **NOT EXPLOITABLE** | ✅ 2026-01-21: проанализировано |
 
 ### Результаты верификации 2026-01-21
 
@@ -149,6 +150,29 @@ cargo test --release -- --nocapture corrupted
 - **Верификация после исправления модели:**
   - Quint random simulation: ✅ PASS
   - Apalache bounded model checking: ✅ PASS
+
+### BC-009: Timing side-channel в verifier (NOT EXPLOITABLE)
+- **Найден:** Timing analysis 21.01.2026
+- **Описание:** Разница во времени верификации valid vs wrong_digest proof
+- **Измерения:**
+  ```
+  Correct digest:   Median=5608 µs
+  Wrong digests:    Median=5292 µs (среднее по 20 разным digests)
+  Relative difference: 5.64%
+  Signal-to-noise ratio: 0.59
+  ```
+- **Вопрос:** Можно ли найти правильный digest через timing oracle (минимизация времени)?
+- **Анализ:**
+  1. **Correct digest SLOWER** — атакующий ищет максимум, не минимум
+  2. **Signal-to-noise = 0.59** — сигнал меньше шума между разными wrong digests
+  3. **Measurements needed = 33** — на каждый digest-кандидат
+  4. **Field size = 2^254** — brute force невозможен даже с оракулом
+  5. **No algebraic structure** — нет способа уменьшить пространство поиска
+  6. **Network jitter (1ms) >> timing difference (316µs)** — 3.2x маскирование
+- **Расчёт времени brute force с oracle:** 1.70×10^68 лет
+- **Статус:** ✅ **NOT EXPLOITABLE**
+- **Рекомендация:** Accept (Low priority для добавления constant-time padding)
+- **Тест:** `cargo test --release test_bc009_timing_oracle_attack -- --nocapture`
 
 ## Tracking System
 

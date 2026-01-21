@@ -394,6 +394,16 @@ pub mod known_bugs {
         severity: "Low (не soundness bug)",
     };
 
+    // BC-007: CLOSED - deposit_sum/vault_rand_val коллизии, vault_rand_val убран
+    // BC-008: NOT A BUG - model artifact в Quint модели (split с одинаковыми amounts)
+
+    pub const BC_009: BugCandidateInfo = BugCandidateInfo {
+        id: "BC-009",
+        title: "Timing side-channel в verifier: valid vs wrong_digest timing deviation",
+        location: "verifier::verify_proof_",
+        severity: "Medium (требует анализа эксплуатируемости)",
+    };
+
     // BC-007: CLOSED - deposit_sum formula изменилась, vault_rand_val убран
 }
 
