@@ -238,6 +238,7 @@ dependencies = [
  "halo2-ecc",
  "halo2_gadgets",
  "halo2_proofs",
+ "hex",
  "itertools 0.11.0",
  "poseidon-base",
  "poseidon-circuit",

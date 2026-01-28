@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use crate::proof::*;
 
 use halo2_base::AssignedValue;
 use halo2_base::halo2_proofs::{
@@ -114,23 +115,29 @@ pub struct CircuitParams {
 pub struct DarkDexCircuit {
     pub token_type: Option<Fr>,
     pub private_note_sum: Option<Fr>,
-    //pub vault_rand_val: Option<Fr>,
-    pub sk: Option<Fr>,
-    pub sk_commitment: Option<Fr>,
+    pub sk_u: Option<Fr>,
+    pub sk_u_commitment: Option<Fr>,
     _marker: PhantomData<Fr>,
 }
 
 impl DarkDexCircuit {
-    pub fn new(token_type: Option<Fr>, private_note_sum: Option<Fr>, /*vault_rand_val: Option<Fr>,*/ sk: Option<Fr>, sk_commitment: Option<Fr>) -> Self {
+    pub fn new(token_type: Option<Fr>, private_note_sum: Option<Fr>, sk_u: Option<Fr>, sk_u_commitment: Option<Fr>) -> Self {
         Self {
             token_type,
             private_note_sum,
-            //vault_rand_val,
-            sk,
-            sk_commitment,
+            sk_u,
+            sk_u_commitment,
             _marker: PhantomData,
         }
     }
+
+    pub fn public_inputs(&self) -> Vec<Fr> {
+        let data_to_hash = [self.sk_u_commitment.unwrap(), self.private_note_sum.unwrap(), self.token_type.unwrap(), self.sk_u.unwrap()];
+        let digest = poseidon_hash(data_to_hash);
+        let mut instances = vec![self.private_note_sum.unwrap(), self.token_type.unwrap(), digest];
+        instances
+    }
+
 }
 
 #[derive(Clone)]
@@ -138,15 +145,13 @@ pub struct DarkDexConfig{
     advices: [Column<Advice>; 5],
     key_data: Column<Advice>,
     deposit_identifier_data: Column<Advice>,
-    public_inputs: Column<Instance>, /**  private_note_sum_public_val, token_type_id_public_val, deposit_identifier_digest (8 words) */
+    public_inputs: Column<Instance>, 
     poseidon_config: PoseidonConfig<Fr, 3, 2>,
 }
-
 
 impl Circuit<Fr> for DarkDexCircuit {
     type Config = DarkDexConfig;
     type FloorPlanner = SimpleFloorPlanner;
-
 
     fn without_witnesses(&self) -> Self {
         Self::default()
@@ -161,7 +166,7 @@ impl Circuit<Fr> for DarkDexCircuit {
         meta.enable_equality(public_inputs);
 
         /// Poseidon config
-        /// 
+ 
         let advices = [
             meta.advice_column(),
             meta.advice_column(),
@@ -205,7 +210,7 @@ impl Circuit<Fr> for DarkDexCircuit {
             || "asssign sk key data",
             |mut region| {
                 let cell_sk = region
-                    .assign_advice(|| "", config.key_data, 0, || self.sk.map_or(Value::unknown(), Value::known))
+                    .assign_advice(|| "", config.key_data, 0, || self.sk_u.map_or(Value::unknown(), Value::known))
                     .expect("assign copy advice should not fail");
                 let cell_padd = region
                     .assign_advice(|| "", config.key_data, 1, || Value::known(Fr::zero()))
@@ -225,7 +230,7 @@ impl Circuit<Fr> for DarkDexCircuit {
             |mut region| {
 
                 let cell_sk_commitment = region
-                    .assign_advice(|| "", config.deposit_identifier_data, 0, || self.sk_commitment.map_or(Value::unknown(), Value::known))
+                    .assign_advice(|| "", config.deposit_identifier_data, 0, || self.sk_u_commitment.map_or(Value::unknown(), Value::known))
                     .expect("assign copy advice should not fail");
                 
                 let cell_private_note_sum = region
@@ -235,10 +240,6 @@ impl Circuit<Fr> for DarkDexCircuit {
                 let cell_token_type = region
                     .assign_advice(|| "", config.deposit_identifier_data, 2, || self.token_type.map_or(Value::unknown(), Value::known))
                     .expect("assign copy advice should not fail");
-
-                /*let cell_vault_rand_val = region
-                    .assign_advice(|| "", config.deposit_identifier_data, 3, || self.vault_rand_val.map_or(Value::unknown(), Value::known))
-                    .expect("assign copy advice should not fail");*/
 
                 region.constrain_equal(cell_sk_commitment.cell(), hash.cell()).unwrap();
 
@@ -252,35 +253,48 @@ impl Circuit<Fr> for DarkDexCircuit {
 
         let data_to_hash: [AssignedCell<Fr, Fr>; 4] = [deposit_identifier_cells[0].clone(), deposit_identifier_cells[1].clone(), deposit_identifier_cells[2].clone(), key_cell.0.clone()];
 
-
         let final_hash = poseidon_hash_gadget(
             config.poseidon_config,
             layouter.namespace(|| "final poseidon check"),
             data_to_hash,
         )?;
 
-        
         layouter.constrain_instance(final_hash.cell(), config.public_inputs, 2)?;
 
-        
         Ok(())
     }
+
 }
 
+pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>,  sk_u: Option<Fr>, sk_u_commitment: Option<Fr>) -> Result<Proof, plonk::Error> {
+    let circuit: DarkDexCircuit = DarkDexCircuit::new( token_type, private_note_sum, sk_u, sk_u_commitment);
+    let now = Instant::now();
+    let vk = keygen_vk(params, &circuit).unwrap();
+    let pk = keygen_pk(params, vk.clone(), &circuit).unwrap();
+    let public_inputs = circuit.public_inputs();
+    let proof = Proof::create(
+        &params,
+        &pk,
+        circuit,
+        &[&public_inputs],
+        OsRng
+    );
+    let end  = now.elapsed().as_millis();
+    println!("Dark Dex circuit proof generation time: {:?}", end);
+    proof
+}
 
 #[test]
 fn simple_test() {
-    let sk_u_raw = random::<u64>();
-    let token_type_raw = 1u64;
-    let private_note_sum_raw = 1000u64;
-    //let vault_rand_val_raw = 111u64;
+    let sk_u = random::<u64>();
+    let token_type = 1u64;
+    let private_note_sum = 1000u64;
 
-    println!("sk_u_raw = {:#x}", sk_u_raw);
+    println!("sk_u = {:#x}", sk_u);
 
-    let sk_u = Fr::from(sk_u_raw);
-    let token_type = Fr::from(token_type_raw);
-    let private_note_sum = Fr::from(private_note_sum_raw);
-    //let vault_rand_val = Fr::from(vault_rand_val_raw);
+    let sk_u = Fr::from(sk_u);
+    let token_type = Fr::from(token_type);
+    let private_note_sum = Fr::from(private_note_sum);
 
     let sk_u_commitment = poseidon_hash([sk_u, Fr::zero()]);
 
@@ -288,9 +302,8 @@ fn simple_test() {
 
     let digest = poseidon_hash(data_to_hash);
 
-    let mut pub_inputs = vec![private_note_sum, token_type, digest];
-
-    let circuit: DarkDexCircuit = DarkDexCircuit::new(Some(token_type), Some(private_note_sum), /*Some(vault_rand_val),*/ Some(sk_u), Some(sk_u_commitment));
+    let circuit: DarkDexCircuit = DarkDexCircuit::new(Some(token_type), Some(private_note_sum), Some(sk_u), Some(sk_u_commitment));
+    let pub_inputs = circuit.public_inputs();
 
     let prover = MockProver::run(8, &circuit, vec![pub_inputs]).unwrap();
     assert_eq!(prover.verify(), Ok(()));

@@ -8,6 +8,7 @@ poseidon = { git = "https://github.com/scroll-tech/poseidon.git", branch = "scro
 
 [dependencies]
 
+hex = "0.4.3"
 itertools = "0.11"
 
 rand = "0.8"
