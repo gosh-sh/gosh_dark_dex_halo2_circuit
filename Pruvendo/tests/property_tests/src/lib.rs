@@ -44,3 +44,6 @@ mod timing_tests;
 
 #[cfg(test)]
 mod real_prover_tests;
+
+#[cfg(test)]
+mod bc_tvm_004_panic_tests;
