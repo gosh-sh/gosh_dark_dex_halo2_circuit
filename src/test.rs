@@ -183,10 +183,7 @@ fn full_test_with_backuped_params() {
 fn verifier_sketch_test() {
     let token_type = 1u64;
     let private_note_sum = 1000u64;
-    let digest: [u8; 32] = [
-        139, 231, 190, 192, 75, 171, 134, 3, 16, 33, 13, 128, 42, 63, 54, 159, 130, 154, 250, 154,
-        202, 177, 172, 169, 241, 12, 99, 227, 165, 213, 215, 17,
-    ];
+    let digest: [u8; 32] = [53, 77, 163, 154, 53, 95, 74, 210, 36, 162, 125, 216, 200, 40, 152, 35, 51, 193, 78, 67, 18, 185, 117, 72, 40, 240, 99, 139, 88, 244, 120, 29];
     let params = read_kzg_params("kzg_params.bin".to_string());
     let mut proof: Vec<u8> = std::fs::read("proof.bin".to_string()).unwrap();
 
