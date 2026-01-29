@@ -1,17 +1,17 @@
-use poseidon_circuit::poseidon::Pow5Chip;
-use poseidon_circuit::{hash::*, DEFAULT_STEP};
 use halo2_proofs::dev::MockProver;
+use poseidon_circuit::poseidon::Pow5Chip;
+use poseidon_circuit::{DEFAULT_STEP, hash::*};
 
 use halo2_proofs::halo2curves::{
     bn256::{Bn256, Fr, G1Affine},
     group::ff::PrimeField,
 };
 
-use rand::SeedableRng;
 use halo2_proofs::{
     circuit::{Layouter, SimpleFloorPlanner},
     plonk::{Circuit, ConstraintSystem, Error},
 };
+use rand::SeedableRng;
 
 use halo2_proofs::plonk::{create_proof, keygen_pk, keygen_vk, verify_proof};
 use halo2_proofs::poly::commitment::ParamsProver;
@@ -26,7 +26,7 @@ use halo2_proofs::transcript::{
 
 use rand_chacha::ChaCha8Rng;
 
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 struct TestCircuit(PoseidonHashTable<Fr>, usize);
 
@@ -164,7 +164,7 @@ fn proof_and_verify() {
 
     let proof_script = transcript.finalize();
 
-    let end  = now.elapsed().as_millis();
+    let end = now.elapsed().as_millis();
     println!("proof generation time: {:?}", end);
 
     let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof_script[..]);

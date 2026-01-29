@@ -22,11 +22,9 @@ use serde::{Deserialize, Serialize};
 
 use halo2_proofs::SerdeFormat;
 
-use halo2_proofs::{
-    poly::{
-        commitment::{Blind, CommitmentScheme, Params, Prover},
-        Basis, Coeff, LagrangeCoeff, Polynomial, ProverQuery,
-    },
+use halo2_proofs::poly::{
+    Basis, Coeff, LagrangeCoeff, Polynomial, ProverQuery,
+    commitment::{Blind, CommitmentScheme, Params, Prover},
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -42,7 +40,6 @@ impl Proof {
         instances: &[&[Fr]],
         rng: impl RngCore,
     ) -> Result<Self, plonk::Error> {
-
         let mut transcript = Blake2bWrite::<_, <Bn256 as Engine>::G1Affine, _>::init(Vec::new());
         plonk::create_proof::<KZGCommitmentScheme<Bn256>, ProverSHPLONK<Bn256>, _, _, _, _>(
             params,
@@ -63,7 +60,9 @@ impl Proof {
         params: &ParamsKZG<Bn256>,
         instances: &[&[Fr]],
     ) -> Result<(), plonk::Error> {
-        let vk: VerifyingKey<G1Affine> = VerifyingKey::read::<_, C>(&mut vk_slice, SerdeFormat::RawBytesUnchecked).expect("Reading vkey should not fail");
+        let vk: VerifyingKey<G1Affine> =
+            VerifyingKey::read::<_, C>(&mut vk_slice, SerdeFormat::RawBytesUnchecked)
+                .expect("Reading vkey should not fail");
         self.verify(&vk, params, instances)
     }
 
@@ -77,7 +76,9 @@ impl Proof {
     ) -> Result<(), plonk::Error> {
         let mut vk_bytes: Vec<u8> = std::fs::read(vk_path).unwrap();
         let mut vk_slice: &[u8] = &vk_bytes;
-        let vk: VerifyingKey<G1Affine> = VerifyingKey::read::<_, C>(&mut vk_slice, SerdeFormat::RawBytesUnchecked).expect("Reading vkey should not fail");
+        let vk: VerifyingKey<G1Affine> =
+            VerifyingKey::read::<_, C>(&mut vk_slice, SerdeFormat::RawBytesUnchecked)
+                .expect("Reading vkey should not fail");
         self.verify(&vk, params, instances)
     }
 

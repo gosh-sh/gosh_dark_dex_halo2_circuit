@@ -1,6 +1,6 @@
-use std::time::{Instant, Duration};
-use rand_chacha::ChaCha8Rng;
 use halo2_proofs::dev::MockProver;
+use rand_chacha::ChaCha8Rng;
+use std::time::{Duration, Instant};
 
 use halo2_proofs::halo2curves::{
     bn256::{Bn256, Fr, G1Affine},
@@ -8,8 +8,8 @@ use halo2_proofs::halo2curves::{
 };
 
 use halo2_proofs::{
-    circuit::{Layouter, Value, AssignedCell, SimpleFloorPlanner},
-    plonk::{Circuit, ConstraintSystem, Error, Column, Advice, Instance},
+    circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
+    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
 };
 
 use halo2_proofs::plonk::{create_proof, keygen_pk, keygen_vk, verify_proof};
@@ -23,22 +23,23 @@ use halo2_proofs::transcript::{
     Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
 };
 
-use poseidon_base::primitives::{ConstantLength, Hash as PoseidonHash, P128Pow5T3, P128Pow5T3Compact, Spec,  CachedSpec};
+use poseidon_base::primitives::{
+    CachedSpec, ConstantLength, Hash as PoseidonHash, P128Pow5T3, P128Pow5T3Compact, Spec,
+};
 
+pub use poseidon_circuit::poseidon::{Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig};
 use poseidon_circuit::{
+    Hashable,
     poseidon::{
         //primitives::{ConstantLength, Hash as PoseidonHash, P128Pow5T3},
         Hash,
     },
-    Hashable,
 };
 use rand::thread_rng;
-pub use poseidon_circuit::poseidon::{Pow5Chip as PoseidonChip, Pow5Config as PoseidonConfig};
 
 use rand::SeedableRng;
 
 pub type P128Pow5T3Fr = P128Pow5T3<Fr>;
-
 
 pub fn poseidon_hash_gadget<const L: usize>(
     config: PoseidonConfig<Fr, 3, 2>,
@@ -56,7 +57,7 @@ pub fn poseidon_hash_gadget<const L: usize>(
 
 // TODO: make Element Hashable
 pub fn poseidon_hash<const L: usize>(message: [Fr; L]) -> Fr {
-   PoseidonHash::<Fr, P128Pow5T3Compact<Fr>, ConstantLength<L>, 3, 2>::init().hash(message)
+    PoseidonHash::<Fr, P128Pow5T3Compact<Fr>, ConstantLength<L>, 3, 2>::init().hash(message)
 }
 
 #[derive(Clone, Default, Debug)]
@@ -82,18 +83,36 @@ impl Signature {
         instance: Column<Instance>,
         poseidon_config: PoseidonConfig<Fr, 3, 2>,
     ) -> Result<(), Error> {
-         
-        let message = layouter.namespace(|| "message witness").assign_region(|| "message", |mut region| {
-            region.assign_advice(|| "load advice", advice, 0, || Value::known(Fr::from(self.message)))
-        })?;
+        let message = layouter.namespace(|| "message witness").assign_region(
+            || "message",
+            |mut region| {
+                region.assign_advice(
+                    || "load advice",
+                    advice,
+                    0,
+                    || Value::known(Fr::from(self.message)),
+                )
+            },
+        )?;
 
-        let secret_key = layouter.namespace(|| "secret key witness").assign_region(|| "secret_key", |mut region| {
-            region.assign_advice(|| "load advice", advice, 0, || Value::known(Fr::from(self.secret_key)))
-        })?;
+        let secret_key = layouter.namespace(|| "secret key witness").assign_region(
+            || "secret_key",
+            |mut region| {
+                region.assign_advice(
+                    || "load advice",
+                    advice,
+                    0,
+                    || Value::known(Fr::from(self.secret_key)),
+                )
+            },
+        )?;
 
-        let padding = layouter.namespace(|| "padding witness").assign_region(|| "padding witness", |mut region| {
-            region.assign_advice_from_constant(|| "load constant advice", advice, 0, Fr::zero())
-        })?;
+        let padding = layouter.namespace(|| "padding witness").assign_region(
+            || "padding witness",
+            |mut region| {
+                region.assign_advice_from_constant(|| "load constant advice", advice, 0, Fr::zero())
+            },
+        )?;
 
         let address_from_private_key = poseidon_hash_gadget(
             poseidon_config,
@@ -118,7 +137,6 @@ impl Signature {
         vec![self.address(), Fr::from(self.message)]
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub struct CircuitConfig {
@@ -198,8 +216,6 @@ fn poseidon_hash_snapshot() {
 
     let v = [1u8; 32];
 
-    
-   
     // make sure the debug representation doesn't change so we can change the hash impl
     assert_eq!(
         format!("{result:?}"),
@@ -248,7 +264,7 @@ fn test() {
 
     let proof_script = transcript.finalize();
 
-    let end  = now.elapsed().as_millis();
+    let end = now.elapsed().as_millis();
     println!("proof generation time: {:?}", end);
 
     let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof_script[..]);
@@ -275,5 +291,4 @@ fn test() {
 
     let end = now.elapsed().as_millis();
     println!("verification time: {:?}", end);
- 
 }
