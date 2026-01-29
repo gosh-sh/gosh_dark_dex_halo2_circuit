@@ -280,7 +280,7 @@ pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private
         OsRng
     );
     let end  = now.elapsed().as_millis();
-    println!("Dark Dex circuit proof generation time: {:?}", end);
+    //println!("Dark Dex circuit proof generation time: {:?}", end);
     proof
 }
 

@@ -134,6 +134,8 @@ fn full_test_with_backuped_params() {
 
     let sk_u = Fr::from(sk_u);
     let token_type = Fr::from(token_type);
+
+    let private_note_sum = 1000u64;
     let private_note_sum = Fr::from(private_note_sum);
     let sk_u_commitment = poseidon_hash([sk_u, Fr::zero()]);
     
