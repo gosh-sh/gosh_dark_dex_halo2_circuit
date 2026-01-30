@@ -8,7 +8,7 @@
 use halo2_proofs::poly::kzg::commitment::ParamsKZG;
 use halo2_proofs::halo2curves::bn256::Bn256;
 use halo2_proofs::SerdeFormat;
-use gosh_dark_dex_halo2_circuit::prover::setup;
+use gosh_dark_dex_halo2_circuit::snark_utils::setup;
 
 // =============================================================================
 // Params Size Tests

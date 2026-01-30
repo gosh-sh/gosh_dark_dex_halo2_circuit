@@ -8,9 +8,9 @@
 //! После poseidon_instead_of_ecc: ECC убран, scalar_multiply (главный
 //! timing-leak vector) больше не используется.
 
-use crate::helpers::{ensure_working_directory, compute_sk_commitment, compute_digest};
+use crate::helpers::{ensure_working_directory, compute_sk_commitment, compute_digest, generate_proof_for_test, verify_existing_proof_with_pub_inputs, compute_public_inputs, generate_verififcation_key_without_witness, generate_proof, verify_proof_};
 use gosh_dark_dex_halo2_circuit::circuit::{DarkDexCircuit, poseidon_hash};
-use gosh_dark_dex_halo2_circuit::prover::{generate_proof, read_kzg_params};
+use gosh_dark_dex_halo2_circuit::snark_utils::{read_kzg_params, setup};
 use halo2_base::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
 use std::time::Instant;
 
@@ -462,8 +462,7 @@ fn test_special_sk_values_timing() {
 /// Это важно чтобы атакующий не мог определить валидность proof по времени
 #[test]
 fn test_verifier_timing_valid_vs_invalid() {
-    use gosh_dark_dex_halo2_circuit::prover::{setup, generate_proof, generate_verififcation_key_without_witness};
-    use gosh_dark_dex_halo2_circuit::verifier::verify_proof_;
+    use crate::helpers::{generate_proof, verify_proof_};
 
     const SAMPLES: usize = 50;
     const WARMUP: usize = 5;
@@ -598,7 +597,7 @@ fn test_verifier_timing_valid_vs_invalid() {
 /// Это важно чтобы атакующий не мог вывести sk по времени prover
 #[test]
 fn test_prover_timing_no_sk_correlation() {
-    use gosh_dark_dex_halo2_circuit::prover::setup;
+    // setup imported from top level
 
     const SAMPLES: usize = 20;  // Proof generation is slow, fewer samples
 
@@ -818,9 +817,7 @@ fn test_field_arithmetic_timing() {
 /// Run: cargo test --release test_bc009_timing_oracle_attack -- --nocapture
 #[test]
 fn test_bc009_timing_oracle_attack() {
-    use gosh_dark_dex_halo2_circuit::prover::{setup, generate_proof, generate_verififcation_key_without_witness};
-    use gosh_dark_dex_halo2_circuit::verifier::verify_proof_;
-    use crate::helpers::known_bugs;
+    use crate::helpers::{generate_proof, verify_proof_, known_bugs};
 
     const SAMPLES_PER_DIGEST: usize = 30;
     const NUM_DIGESTS: usize = 20;

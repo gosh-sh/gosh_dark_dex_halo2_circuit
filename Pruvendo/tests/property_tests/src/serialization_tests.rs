@@ -8,8 +8,8 @@
 use halo2_proofs::poly::kzg::commitment::ParamsKZG;
 use halo2_proofs::halo2curves::bn256::Bn256;
 use halo2_proofs::SerdeFormat;
-use gosh_dark_dex_halo2_circuit::prover::{setup, generate_verififcation_key_without_witness};
-use gosh_dark_dex_halo2_circuit::verifier::verification_key_from_bytes;
+use gosh_dark_dex_halo2_circuit::snark_utils::setup;
+use crate::helpers::{generate_verififcation_key_without_witness, verification_key_from_bytes};
 
 // =============================================================================
 // KZG Params Serialization Tests

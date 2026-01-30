@@ -6,7 +6,7 @@
 //! - Params size scaling
 
 use halo2_proofs::SerdeFormat;
-use gosh_dark_dex_halo2_circuit::prover::setup;
+use gosh_dark_dex_halo2_circuit::snark_utils::setup;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -52,10 +52,12 @@ fn test_setup_size_exponential() {
 // read_kzg_params Error Handling Tests
 // =============================================================================
 
+use gosh_dark_dex_halo2_circuit::snark_utils::read_kzg_params;
+
 #[test]
 fn test_read_params_nonexistent_file() {
     let result = std::panic::catch_unwind(|| {
-        gosh_dark_dex_halo2_circuit::prover::read_kzg_params("/nonexistent/path.bin".to_string())
+        read_kzg_params("/nonexistent/path.bin".to_string())
     });
     assert!(result.is_err(), "Nonexistent file should panic");
 }
@@ -64,9 +66,9 @@ fn test_read_params_nonexistent_file() {
 fn test_read_params_empty_file() {
     let temp_file = NamedTempFile::new().unwrap();
     let path = temp_file.path().to_string_lossy().to_string();
-    
+
     let result = std::panic::catch_unwind(|| {
-        gosh_dark_dex_halo2_circuit::prover::read_kzg_params(path)
+        read_kzg_params(path)
     });
     assert!(result.is_err(), "Empty file should panic");
 }
@@ -74,15 +76,15 @@ fn test_read_params_empty_file() {
 #[test]
 fn test_read_params_corrupted_file() {
     let mut temp_file = NamedTempFile::new().unwrap();
-    
+
     // Write some garbage data
     temp_file.write_all(&[0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x02, 0x03]).unwrap();
     let path = temp_file.path().to_string_lossy().to_string();
-    
+
     let result = std::panic::catch_unwind(|| {
-        gosh_dark_dex_halo2_circuit::prover::read_kzg_params(path)
+        read_kzg_params(path)
     });
-    
+
     // Should fail
     match result {
         Err(_) => println!("Corrupted file caused panic"),
@@ -94,21 +96,21 @@ fn test_read_params_corrupted_file() {
 fn test_read_params_truncated_file() {
     // Create valid params, write to file, truncate, try to read
     let params = setup(4);
-    
+
     let mut buf = Vec::new();
     params.write_custom(&mut buf, SerdeFormat::RawBytesUnchecked).unwrap();
-    
+
     // Truncate to 1/4 of original
     let truncated = &buf[..buf.len() / 4];
-    
+
     let mut temp_file = NamedTempFile::new().unwrap();
     temp_file.write_all(truncated).unwrap();
     let path = temp_file.path().to_string_lossy().to_string();
-    
+
     let result = std::panic::catch_unwind(|| {
-        gosh_dark_dex_halo2_circuit::prover::read_kzg_params(path)
+        read_kzg_params(path)
     });
-    
+
     assert!(result.is_err(), "Truncated params file should fail");
 }
 

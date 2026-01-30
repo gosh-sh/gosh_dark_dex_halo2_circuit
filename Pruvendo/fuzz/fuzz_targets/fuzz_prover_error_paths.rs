@@ -37,7 +37,7 @@ fuzz_target!(|input: FuzzInput| {
     let k = (input.k_value % 8) + 1; // k in range [1, 8]
     
     let result = std::panic::catch_unwind(|| {
-        gosh_dark_dex_halo2_circuit::prover::setup(k as u32)
+        gosh_dark_dex_halo2_circuit::snark_utils::setup(k as u32)
     });
     
     // Setup should never panic for valid k values

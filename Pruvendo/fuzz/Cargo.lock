@@ -326,7 +326,7 @@ dependencies = [
 [[package]]
 name = "halo2-base"
 version = "0.2.2"
-source = "git+https://github.com/scroll-tech/halo2-lib?branch=develop#b236b88f2baa0f359cd30ffe1354644e7022c272"
+source = "git+https://github.com/gosh-sh/halo2-lib?branch=develop#c49e23af407c22fda99071bf7bcd950e17073243"
 dependencies = [
  "ff",
  "halo2_proofs",
@@ -341,7 +341,7 @@ dependencies = [
 [[package]]
 name = "halo2-ecc"
 version = "0.2.2"
-source = "git+https://github.com/scroll-tech/halo2-lib?branch=develop#b236b88f2baa0f359cd30ffe1354644e7022c272"
+source = "git+https://github.com/gosh-sh/halo2-lib?branch=develop#c49e23af407c22fda99071bf7bcd950e17073243"
 dependencies = [
  "ff",
  "group",
@@ -360,7 +360,7 @@ dependencies = [
 [[package]]
 name = "halo2_gadgets"
 version = "1.1.0"
-source = "git+https://github.com/scroll-tech/halo2.git?branch=v1.1#e5ddf67e5ae16be38d6368ed355c7c41906272ab"
+source = "git+https://github.com/gosh-sh/halo2.git?branch=v1.1#ed84d2d19772ad3c389e77d24ab10fc209f55c40"
 dependencies = [
  "arrayvec",
  "bitvec",
@@ -377,7 +377,7 @@ dependencies = [
 [[package]]
 name = "halo2_proofs"
 version = "1.1.0"
-source = "git+https://github.com/scroll-tech/halo2.git?branch=v1.1#e5ddf67e5ae16be38d6368ed355c7c41906272ab"
+source = "git+https://github.com/gosh-sh/halo2.git?branch=v1.1#ed84d2d19772ad3c389e77d24ab10fc209f55c40"
 dependencies = [
  "ark-std",
  "blake2b_simd",

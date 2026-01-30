@@ -155,8 +155,89 @@ pub fn check_circuit_with_wrong_commitment(
 // Функции для полного proof/verify flow
 // ============================================================
 
-use gosh_dark_dex_halo2_circuit::prover::{generate_proof, read_kzg_params, generate_verififcation_key_without_witness};
-use gosh_dark_dex_halo2_circuit::verifier::verify_proof_;
+use gosh_dark_dex_halo2_circuit::snark_utils::{read_kzg_params, setup};
+use gosh_dark_dex_halo2_circuit::proof::Proof;
+use halo2_base::halo2_proofs::{
+    halo2curves::bn256::{Bn256, G1Affine},
+    plonk::{keygen_vk, keygen_pk, VerifyingKey, ProvingKey},
+    poly::kzg::commitment::ParamsKZG,
+};
+use halo2_proofs::SerdeFormat;
+use rand::rngs::OsRng;
+
+// Re-export for other test modules
+pub use gosh_dark_dex_halo2_circuit::snark_utils::read_kzg_params as read_kzg_params_pub;
+
+/// Создаёт VerifyingKey без witness (для совместимости со старым API)
+pub fn generate_verififcation_key_without_witness(params: &ParamsKZG<Bn256>) -> VerifyingKey<G1Affine> {
+    let circuit = DarkDexCircuit::default();
+    keygen_vk(params, &circuit).unwrap()
+}
+
+/// Создаёт ProvingKey (для совместимости со старым API)
+pub fn generate_proof_key(
+    params: &ParamsKZG<Bn256>,
+    token_type: Option<Fr>,
+    private_note_sum: Option<Fr>,
+    sk_u: Option<Fr>,
+    sk_u_commitment: Option<Fr>,
+) -> ProvingKey<G1Affine> {
+    let circuit = DarkDexCircuit::new(token_type, private_note_sum, sk_u, sk_u_commitment);
+    let vk = keygen_vk(params, &circuit).unwrap();
+    keygen_pk(params, vk, &circuit).unwrap()
+}
+
+/// Генерирует proof (совместимость со старым API)
+/// Возвращает proof bytes и заполняет pub_inputs
+pub fn generate_proof(
+    params: &ParamsKZG<Bn256>,
+    token_type: Option<Fr>,
+    private_note_sum: Option<Fr>,
+    sk_u: Option<Fr>,
+    sk_u_commitment: Option<Fr>,
+    _pub_inputs: &mut Vec<Fr>,
+) -> Vec<u8> {
+    let circuit = DarkDexCircuit::new(token_type, private_note_sum, sk_u, sk_u_commitment);
+    let vk = keygen_vk(params, &circuit).unwrap();
+    let pk = keygen_pk(params, vk, &circuit).unwrap();
+
+    // Compute public inputs from circuit values
+    let token_type_fr = token_type.unwrap_or(Fr::from(0u64));
+    let private_note_sum_fr = private_note_sum.unwrap_or(Fr::from(0u64));
+    let sk = sk_u.unwrap_or(Fr::from(0u64));
+    let digest = compute_digest(sk, token_type_fr, private_note_sum_fr);
+    let instances: Vec<Fr> = vec![private_note_sum_fr, token_type_fr, digest];
+
+    let proof = Proof::create(params, &pk, circuit, &[instances.as_slice()], OsRng)
+        .expect("proof generation should not fail");
+    proof.inner()
+}
+
+/// Верифицирует proof (совместимость со старым API)
+pub fn verify_proof_(
+    params: &ParamsKZG<Bn256>,
+    proof_bytes: &[u8],
+    vk: &VerifyingKey<G1Affine>,
+    pub_inputs: Vec<Fr>,
+) -> bool {
+    let proof = Proof::new(proof_bytes.to_vec());
+    let instances: Vec<&[Fr]> = vec![pub_inputs.as_slice()];
+    proof.verify(vk, params, &instances).is_ok()
+}
+
+/// Читает VerifyingKey из bytes
+pub fn verification_key_from_bytes(bytes: &[u8]) -> VerifyingKey<G1Affine> {
+    let mut slice: &[u8] = bytes;
+    VerifyingKey::read::<_, DarkDexCircuit>(&mut slice, SerdeFormat::RawBytesUnchecked)
+        .expect("Failed to read VerifyingKey")
+}
+
+/// Читает VerifyingKey из файла по пути
+pub fn verification_key_from_path(path: String) -> VerifyingKey<G1Affine> {
+    let vk_bytes = std::fs::read(&path)
+        .unwrap_or_else(|e| panic!("Failed to read VK from {}: {}", path, e));
+    verification_key_from_bytes(&vk_bytes)
+}
 
 /// Результат верификации proof
 #[derive(Debug, Clone, PartialEq)]

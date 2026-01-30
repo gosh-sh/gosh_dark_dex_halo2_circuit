@@ -9,9 +9,8 @@
 
 use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 use halo2_proofs::poly::commitment::Params;
-use gosh_dark_dex_halo2_circuit::prover::*;
-
-use crate::helpers::compute_sk_commitment;
+use gosh_dark_dex_halo2_circuit::snark_utils::{setup, read_kzg_params, setup_and_backup_kzg_params, generate_verififcation_key_without_witness_and_backup};
+use crate::helpers::{compute_sk_commitment, generate_verififcation_key_without_witness, generate_proof_key};
 
 // =============================================================================
 // Setup Tests
@@ -178,8 +177,9 @@ fn test_generate_vk_and_backup() {
     // k=8 required for new poseidon circuit
     let params = setup(8);
 
+    use gosh_dark_dex_halo2_circuit::circuit::DarkDexCircuit;
     // Should succeed and create file
-    generate_verififcation_key_without_witness_and_backup(&params, path.clone());
+    generate_verififcation_key_without_witness_and_backup::<DarkDexCircuit>(&params, path.clone());
 
     // File should exist and have content
     let content = std::fs::read(&path).unwrap();

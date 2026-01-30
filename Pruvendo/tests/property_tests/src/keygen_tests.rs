@@ -6,7 +6,8 @@
 //! - Size bounds
 
 use halo2_proofs::SerdeFormat;
-use gosh_dark_dex_halo2_circuit::prover::{setup, generate_verififcation_key_without_witness};
+use gosh_dark_dex_halo2_circuit::snark_utils::setup;
+use crate::helpers::{generate_verififcation_key_without_witness, verification_key_from_bytes};
 
 // =============================================================================
 // VK Determinism Tests
@@ -121,7 +122,7 @@ fn test_vk_roundtrip() {
         vk.write(&mut buf, SerdeFormat::RawBytesUnchecked).unwrap();
         
         // Read back
-        let vk_read = gosh_dark_dex_halo2_circuit::verifier::verification_key_from_bytes(&buf);
+        let vk_read = verification_key_from_bytes(&buf);
         
         // Serialize again
         let mut buf2 = Vec::new();

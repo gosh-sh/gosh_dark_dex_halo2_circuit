@@ -18,8 +18,6 @@ use arbitrary::Arbitrary;
 mod common;
 use common::*;
 
-use gosh_dark_dex_halo2_circuit::prover::read_kzg_params;
-use gosh_dark_dex_halo2_circuit::verifier::{verification_key_from_path, verify_proof_};
 use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
 use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;

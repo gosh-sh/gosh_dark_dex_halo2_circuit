@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[[bin]]
+name = "generate_kzg_params"
+path = "src/bin/generate_kzg_params.rs"
+
 # Тесты необходимо запускать из корня проекта:
 # cd /path/to/gosh_dark_dex_halo2_circuit && cargo test -p darkdex_property_tests --release
 # или с манифестом:
@@ -13,10 +17,10 @@ publish = false
 # Основной проект как зависимость
 gosh_dark_dex_halo2_circuit = { path = "../../.." }
 
-# Необходимые зависимости Halo2 (те же версии что в основном проекте)
-halo2_proofs = { git = "https://github.com/scroll-tech/halo2.git", branch = "v1.1" }
-halo2-base = { git = "https://github.com/scroll-tech/halo2-lib", branch = "develop", default-features = false, features = ["halo2-pse", "display"] }
-halo2-ecc = { git = "https://github.com/scroll-tech/halo2-lib", branch = "develop", default-features = false, features = ["halo2-pse", "display"] }
+# Необходимые зависимости Halo2 (gosh-sh форки, как в основном проекте)
+halo2_proofs = { git = "https://github.com/gosh-sh/halo2.git", branch = "v1.1" }
+halo2-base = { git = "https://github.com/gosh-sh/halo2-lib", branch = "develop", default-features = false, features = ["halo2-pse", "display"] }
+halo2-ecc = { git = "https://github.com/gosh-sh/halo2-lib", branch = "develop", default-features = false, features = ["halo2-pse", "display"] }
 
 # Poseidon primitives для аудита
 poseidon-base = { git = "https://github.com/scroll-tech/poseidon-circuit", branch = "main" }
@@ -31,7 +35,7 @@ tempfile = "3.24.0"
 halo2curves = { git = "https://github.com/scroll-tech/halo2curves", branch = "v0.1.0" }
 
 [patch."https://github.com/privacy-scaling-explorations/halo2.git"]
-halo2_proofs = { git = "https://github.com/scroll-tech/halo2.git", branch = "v1.1" }
+halo2_proofs = { git = "https://github.com/gosh-sh/halo2.git", branch = "v1.1" }
 
 [patch."https://github.com/privacy-scaling-explorations/bls12_381"]
 bls12_381 = { git = "https://github.com/scroll-tech/bls12_381", branch = "feat/impl_scalar_field" }

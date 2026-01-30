@@ -355,3 +355,47 @@ pub fn check_circuit_with_custom_digest(
     }
 }
 
+// =============================================================================
+// REAL PROVER/VERIFIER HELPERS (for fuzz targets that use real proofs)
+// =============================================================================
+
+pub use gosh_dark_dex_halo2_circuit::snark_utils::read_kzg_params;
+pub use gosh_dark_dex_halo2_circuit::proof::Proof;
+
+use halo2_base::halo2_proofs::{
+    halo2curves::bn256::{Bn256, G1Affine},
+    plonk::VerifyingKey,
+    poly::kzg::commitment::ParamsKZG,
+};
+use halo2_proofs::SerdeFormat;
+
+/// Читает VerifyingKey из файла
+/// Замена для старой verifier::verification_key_from_path
+pub fn verification_key_from_path(path: String) -> VerifyingKey<G1Affine> {
+    let vk_bytes = std::fs::read(&path)
+        .unwrap_or_else(|e| panic!("Failed to read VK from {}: {}", path, e));
+    verification_key_from_bytes(&vk_bytes)
+}
+
+/// Читает VerifyingKey из bytes
+/// Замена для старой verifier::verification_key_from_bytes
+pub fn verification_key_from_bytes(bytes: &[u8]) -> VerifyingKey<G1Affine> {
+    let mut slice: &[u8] = bytes;
+    VerifyingKey::read::<_, DarkDexCircuit>(&mut slice, SerdeFormat::RawBytesUnchecked)
+        .expect("Failed to read VerifyingKey")
+}
+
+/// Верифицирует proof с заданными public inputs
+/// Замена для старой verifier::verify_proof_
+/// Возвращает true если proof верифицирован, false если отклонён
+pub fn verify_proof_(
+    params: &ParamsKZG<Bn256>,
+    proof_bytes: &[u8],
+    vk: &VerifyingKey<G1Affine>,
+    pub_inputs: Vec<Fr>,
+) -> bool {
+    let proof = Proof::new(proof_bytes.to_vec());
+    let instances: Vec<&[Fr]> = vec![pub_inputs.as_slice()];
+    proof.verify(vk, params, &instances).is_ok()
+}
+
