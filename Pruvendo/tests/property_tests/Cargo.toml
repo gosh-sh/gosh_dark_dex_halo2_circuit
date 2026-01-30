@@ -8,6 +8,10 @@ publish = false
 name = "generate_kzg_params"
 path = "src/bin/generate_kzg_params.rs"
 
+[[bin]]
+name = "generate_test_fixtures"
+path = "src/bin/generate_test_fixtures.rs"
+
 # Тесты необходимо запускать из корня проекта:
 # cd /path/to/gosh_dark_dex_halo2_circuit && cargo test -p darkdex_property_tests --release
 # или с манифестом:
