@@ -1,2 +1,8 @@
 /target
 *.log
+
+# KZG parameters (generated, can be recreated)
+kzg_params.bin
+
+# External packages (apalache, halo2-analyzer, quint, etc.)
+Pruvendo/external_packages/
