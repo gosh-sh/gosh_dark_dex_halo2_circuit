@@ -308,8 +308,10 @@ dependencies = [
  "halo2-base",
  "halo2_proofs",
  "halo2curves",
+ "hex",
  "libfuzzer-sys",
  "poseidon-base",
+ "rand",
 ]
 
 [[package]]

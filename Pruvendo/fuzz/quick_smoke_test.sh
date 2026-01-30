@@ -16,8 +16,10 @@ TIME_PER_TARGET=5
 # Get all targets
 TARGETS=$(cargo +nightly fuzz list --fuzz-dir "$FUZZ_DIR" 2>/dev/null)
 
-# Exclude known BC targets
-EXCLUDE="fuzz_proving_key_bytes fuzz_verifier_bytes"
+# Exclude known BC targets (upstream bugs that cause panics on corrupted input)
+# BC-001: fuzz_proving_key_bytes, fuzz_verifier_bytes, fuzz_verify_with_vk_bytes
+# BC-003/BC-005: fuzz_read_kzg_params
+EXCLUDE="fuzz_proving_key_bytes fuzz_verifier_bytes fuzz_verify_with_vk_bytes fuzz_read_kzg_params"
 
 echo "=== Quick Smoke Test ==="
 echo "Date: $(date)"

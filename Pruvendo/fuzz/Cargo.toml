@@ -10,6 +10,8 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1", features = ["derive"] }
+hex = "0.4"
+rand = "0.8"
 
 # Основной проект (уже содержит все нужные зависимости)
 # Путь от Pruvendo/fuzz к корню проекта: ../..
@@ -265,6 +267,58 @@ bench = false
 [[bin]]
 name = "fuzz_zero_sk_edge_case"
 path = "fuzz_targets/fuzz_zero_sk_edge_case.rs"
+test = false
+doc = false
+bench = false
+
+# === NEW API COVERAGE TARGETS (2026-01-30) ===
+# Targets for new poseidon_instead_of_ecc API functions
+
+[[bin]]
+name = "fuzz_proof_create_api"
+path = "fuzz_targets/fuzz_proof_create_api.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_proof_verify_api"
+path = "fuzz_targets/fuzz_proof_verify_api.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_verify_with_vk_bytes"
+path = "fuzz_targets/fuzz_verify_with_vk_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_proof_new_api"
+path = "fuzz_targets/fuzz_proof_new_api.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_read_kzg_params"
+path = "fuzz_targets/fuzz_read_kzg_params.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_get_params_api"
+path = "fuzz_targets/fuzz_get_params_api.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_keygen_api"
+path = "fuzz_targets/fuzz_keygen_api.rs"
 test = false
 doc = false
 bench = false
