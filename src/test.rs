@@ -51,6 +51,22 @@ use rand::rngs::OsRng;
 use halo2_ecc::fields::PrimeField as OtherPrimeField;
 
 #[test]
+fn test () {
+   // let data_to_hash = [sk_u_commitment, private_note_sum, token_type, sk_u];
+
+    //let input_bytes = [0u8; 32];
+    //let t = [Fr::from_bytes(&input_bytes).unwrap()];
+
+    let t2 = Fr::from(0u64);
+    println!("t2: {:?}", t2.to_bytes());
+    let digest = poseidon_hash([Fr::zero()]);
+
+    println!("{:?}", hex::encode(digest.to_bytes()));
+
+   
+}
+
+#[test]
 fn kzg_test_raw() {
     let sk_u = random::<u64>();
     let token_type = 1u64;
