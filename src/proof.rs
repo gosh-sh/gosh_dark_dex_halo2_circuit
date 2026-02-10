@@ -31,7 +31,7 @@ use halo2_base::AssignedValue;
 use halo2_base::gates::RangeChip;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Proof(Vec<u8>);
+pub struct Proof(pub Vec<u8>);
 
 impl Proof {
 

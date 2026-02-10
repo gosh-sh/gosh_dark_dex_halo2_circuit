@@ -46,7 +46,7 @@ use std::{
     rc::Rc,
 };
 
-pub fn setup(k: u32) -> ParamsKZG<Bn256> {
+/*pub fn setup(k: u32) -> ParamsKZG<Bn256> {
     ParamsKZG::new(k)
 }
 
@@ -67,9 +67,9 @@ pub fn read_kzg_params(path: String) -> ParamsKZG<Bn256> {
     let params = ParamsKZG::<Bn256>::read_custom(&mut params_slice, SerdeFormat::RawBytesUnchecked)
         .expect("Reading vkey should not fail");
     params
-}
+}*/
 
-pub fn generate_keys<C: Circuit<Fr>>(
+/*pub fn generate_keys<C: Circuit<Fr>>(
     k: u32,
     circuit: &C,
 ) -> (
@@ -115,7 +115,7 @@ pub fn generate_verification_key_without_witness_and_backup<C: Circuit<Fr> + Def
     let mut vk_buf: Vec<u8> = Vec::new();
     vk.write(&mut vk_buf, SerdeFormat::RawBytesUnchecked).unwrap();
     std::fs::write(path.to_string(), vk_buf).unwrap();
-}
+}*/
 
 pub fn generate_keys_and_backup_for_circuit_builder(
     k: u32,
