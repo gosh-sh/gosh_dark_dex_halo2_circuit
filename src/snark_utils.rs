@@ -12,6 +12,7 @@ use halo2_base::halo2_proofs::{
     transcript::{
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     },
+    SerdeFormat
 };
 
 use crate::proof::*;
@@ -33,7 +34,7 @@ pub fn setup(k: u32) -> ParamsKZG<Bn256> {
     ParamsKZG::new(k)
 }
 
-/*pub fn setup_and_backup_kzg_params(k: u32, path: String) {
+pub fn setup_and_backup_kzg_params(k: u32, path: String) -> ParamsKZG<Bn256> {
     let params: ParamsKZG<Bn256> = ParamsKZG::new(k);
     let mut params_buf: Vec<u8> = Vec::new();
     let _ = params
@@ -41,6 +42,7 @@ pub fn setup(k: u32) -> ParamsKZG<Bn256> {
         .unwrap();
     println!("KZG params len = {:?}", params_buf.len());
     std::fs::write(path, params_buf).unwrap();
+    params
 }
 
 pub fn read_kzg_params(path: String) -> ParamsKZG<Bn256> {
@@ -53,7 +55,7 @@ pub fn read_kzg_params(path: String) -> ParamsKZG<Bn256> {
     params
 }
 
-pub fn get_params<C: Circuit<Fr>>(
+/*pub fn get_params<C: Circuit<Fr>>(
     k: u32,
     circuit: &C,
 ) -> (

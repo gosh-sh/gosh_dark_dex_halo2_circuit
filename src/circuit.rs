@@ -62,6 +62,7 @@ use halo2_base::gates::RangeInstructions;
 //#[derive(Default)]
 pub struct DarkDexCircuit {
     pub k: u32,
+    pub unusable_rows: usize,
     pub lookup_bits: usize,
     pub token_type: Fr,
     pub private_note_sum: Fr,
@@ -71,8 +72,26 @@ pub struct DarkDexCircuit {
 
 impl DarkDexCircuit {
 
+    pub fn default( k: u32, unusable_rows: usize,) -> Self {
+        let lookup_bits = k as usize - 1;
+        let sk_u = Fr::zero();
+        let token_type = Fr::zero();
+        let private_note_sum = Fr::zero();
+        let sk_u_commitment = poseidon_hash(&[Fr::zero(), Fr::zero()]);
+        Self {
+            k,
+            unusable_rows,
+            lookup_bits,
+            token_type,
+            private_note_sum,
+            sk_u,
+            sk_u_commitment
+        }
+    }
+
     pub fn new(
         k: u32,
+        unusable_rows: usize,
         token_type: Fr,
         private_note_sum: Fr,
         sk_u: Fr,
@@ -81,6 +100,7 @@ impl DarkDexCircuit {
         let lookup_bits = k as usize - 1;
         Self {
             k,
+            unusable_rows,
             lookup_bits,
             token_type,
             private_note_sum,
@@ -97,8 +117,7 @@ impl DarkDexCircuit {
         builder.assigned_instances[0] = instances;
         builder
     }
-
-   
+ 
     pub fn closure(&self, core: &mut SinglePhaseCoreManager<Fr>, range: &RangeChip<Fr>) -> Vec<AssignedValue<Fr>>{
         let ctx = core.main();
 
@@ -131,9 +150,24 @@ impl DarkDexCircuit {
         return instances;
         
     }
+
+    pub fn public_inputs(&self) -> Vec<Vec<Fr>> {
+        let data_to_hash = [
+            self.sk_u_commitment,
+            self.private_note_sum,
+            self.token_type,
+            self.sk_u,
+        ];
+
+        let digest = poseidon_hash(&data_to_hash);
+
+        println!("digest {:?}", digest);
+
+        vec![vec![self.private_note_sum, self.token_type, digest]]
+    }
 }
 
-pub fn generate_proof(
+/*pub fn generate_proof(
     k: u32,
     params: &ParamsKZG<Bn256>,
     token_type: Fr,
@@ -151,25 +185,21 @@ pub fn generate_proof(
     let end = now.elapsed().as_millis();
     println!("Dark Dex circuit proof generation time: {:?}", end);
     proof
-}
+}*/
 
 #[test]
 fn simple_test() {
     let k = 12u32;
-    let sk_u = random::<u64>();
-    let token_type = 1u64;
-    let private_note_sum = 1000u64;
+    let unusable_rows = 9;
 
-    println!("sk_u = {:#x}", sk_u);
-
-    let sk_u = Fr::from(sk_u);
-    let token_type = Fr::from(token_type);
-    let private_note_sum = Fr::from(private_note_sum);
+    let sk_u = Fr::from(random::<u64>());
+    let token_type = Fr::from(1u64);
+    let private_note_sum = Fr::from(1000u64);
     let sk_u_commitment = poseidon_hash(&[sk_u, Fr::zero()]);
 
     println!("sk_u_commitment {:?}", sk_u_commitment);
 
-    let circuit: DarkDexCircuit = DarkDexCircuit::new(k, token_type, private_note_sum, sk_u, sk_u_commitment);
+    let circuit: DarkDexCircuit = DarkDexCircuit::new(k, unusable_rows, token_type, private_note_sum, sk_u, sk_u_commitment);
     let mut builder = circuit.create_mock();
     let unusable_rows = 9;
 
@@ -179,23 +209,10 @@ fn simple_test() {
     builder.config_params.lookup_bits = lookup_bits;
 
     builder.calculate_params(Some(unusable_rows));
-
-     let data_to_hash = [
-        sk_u_commitment,
-        private_note_sum,
-        token_type,
-        sk_u,
-    ];
-
-    let digest = poseidon_hash(&data_to_hash);
-
-    println!("digest {:?}", digest);
-
-    let instances = vec![vec![private_note_sum, token_type, digest]];
         
-    MockProver::run(k, &builder, instances).unwrap().assert_satisfied();
+    MockProver::run(k, &builder, circuit.public_inputs()).unwrap().assert_satisfied();
 
-    let invalid_instances = vec![vec![private_note_sum, digest, token_type]];
+    let invalid_instances = vec![vec![Fr::one(), Fr::one(), Fr::one()]];
 
     assert!(MockProver::run(k, &builder, invalid_instances).unwrap().verify().is_ok() == false);
 

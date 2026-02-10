@@ -53,6 +53,91 @@ use rand::rngs::OsRng;
 //use halo2_ecc::fields::PrimeField as OtherPrimeField;
 
 use halo2_base::gates::circuit::{builder::RangeCircuitBuilder, CircuitBuilderStage};
+
+
+#[test]
+fn full_test() {
+    let k = 12u32;
+    let lookup_bits = k as usize - 1;
+    let unusable_rows = 9;
+
+    let mut builder =
+            RangeCircuitBuilder::from_stage(CircuitBuilderStage::Keygen).use_k(k as usize).use_instance_columns(1 as usize);
+    builder.set_lookup_bits(lookup_bits);
+    let range = RangeChip::new(lookup_bits, builder.lookup_manager().clone());
+    let circuit: DarkDexCircuit = DarkDexCircuit::default(k, unusable_rows);
+    let res = circuit.closure(builder.pool(0), &range);
+    builder.assigned_instances[0] = res;
+    
+    let t_cells_lookup = builder.lookup_manager().iter().map(|lm| lm.total_rows()).sum::<usize>();
+    let lookup_bits_ = if t_cells_lookup == 0 { None } else { Some(lookup_bits) };
+    builder.config_params.lookup_bits = lookup_bits_;
+
+    let config_params = builder.calculate_params(Some(unusable_rows));
+
+    let params = setup_and_backup_kzg_params(k, "kzg.bin".to_string());
+    let vk = keygen_vk(&params, &builder).unwrap();
+    let pk = keygen_pk(&params, vk.clone(), &builder).unwrap();
+
+    let mut vk_buf: Vec<u8> = Vec::new();
+    vk
+        .write(&mut vk_buf, SerdeFormat::RawBytesUnchecked)
+        .unwrap();
+
+    std::fs::write("verification_key.bin".to_string(), vk_buf).unwrap();
+
+    let mut pk_buf: Vec<u8> = Vec::new();
+    pk
+        .write(&mut pk_buf, SerdeFormat::RawBytesUnchecked)
+        .unwrap();
+
+    std::fs::write("proof_key.bin".to_string(), pk_buf).unwrap();
+
+    let break_points = builder.break_points();
+    println!("break_points: {:?}", break_points.len());
+    assert!(break_points.len() == 1);
+    println!("break_points: {:?}", break_points[0].len());
+    println!("break_points: {:?}", break_points);
+    drop(builder);
+
+    let break_points_ = break_points[0].clone();
+
+    let mut file = File::create("break_points.bin").unwrap();
+    // Write the u16 data as bytes in little-endian order
+    for value in break_points_ {
+        let v = value as u16;
+        file.write_all(&value.to_le_bytes()).unwrap();
+    }
+    
+    let mut builder = RangeCircuitBuilder::prover(config_params.clone(), break_points).use_instance_columns(1 as usize);
+    let range = RangeChip::new(lookup_bits, builder.lookup_manager().clone());
+   
+    let sk_u_ = random::<u64>();
+    let token_type_ = 10u64;
+    let private_note_sum_ = 1000u64;
+    let sk_u_ = Fr::from(sk_u_);
+    let token_type_ = Fr::from(token_type_);
+    let private_note_sum_ = Fr::from(private_note_sum_);
+    let sk_u_commitment_ = poseidon_hash(&[sk_u_, Fr::zero()]);
+    let data_to_hash_ = [sk_u_commitment_, private_note_sum_, token_type_, sk_u_];
+    let digest_ = poseidon_hash(&data_to_hash_);
+    let mut pub_inputs: Vec<Fr> = vec![private_note_sum_, token_type_, digest_];
+
+    let circuit_: DarkDexCircuit = DarkDexCircuit::new(k, unusable_rows, token_type_, private_note_sum_, sk_u_, sk_u_commitment_);
+    let res = circuit_.closure(builder.pool(0), &range);
+    builder.assigned_instances[0] = res;
+
+    let proof = gen_proof_with_instances(&params, &pk, builder, &[&pub_inputs]);
+    
+    let proof_size = proof.len();
+
+    println!("proof: {:?}", proof);
+
+    check_proof_with_instances(&params, &vk, &proof, &[&pub_inputs],  true);
+}
+
+
+
 #[test]
 fn t() {
     let k = 12u32;
@@ -70,12 +155,11 @@ fn t() {
     let digest = poseidon_hash(&data_to_hash);
     //let mut pub_inputs: Vec<Fr> = vec![private_note_sum, token_type, digest];
 
-
     let mut builder =
             RangeCircuitBuilder::from_stage(CircuitBuilderStage::Keygen).use_k(k as usize).use_instance_columns(1 as usize);
     builder.set_lookup_bits(lookup_bits);
     let range = RangeChip::new(lookup_bits, builder.lookup_manager().clone());
-    let circuit: DarkDexCircuit = DarkDexCircuit::new(k, token_type, private_note_sum, sk_u, sk_u_commitment);
+    let circuit: DarkDexCircuit = DarkDexCircuit::new(k, unusable_rows, token_type, private_note_sum, sk_u, sk_u_commitment);
     let res = circuit.closure(builder.pool(0), &range);
     builder.assigned_instances[0] = res;
     
@@ -89,7 +173,7 @@ fn t() {
     let vk = keygen_vk(&params, &builder).unwrap();
     let pk = keygen_pk(&params, vk.clone(), &builder).unwrap();
 
-   /* let mut vk1_buf: Vec<u8> = Vec::new();
+    /* let mut vk1_buf: Vec<u8> = Vec::new();
     vk
         .write(&mut vk1_buf, SerdeFormat::RawBytesUnchecked)
         .unwrap();
@@ -129,7 +213,7 @@ fn t() {
     //let instances = vec![vec![private_note_sum_, token_type_, digest_]];
 
 
-    let circuit_: DarkDexCircuit = DarkDexCircuit::new(k, token_type_, private_note_sum_, sk_u_, sk_u_commitment_);
+    let circuit_: DarkDexCircuit = DarkDexCircuit::new(k, unusable_rows, token_type_, private_note_sum_, sk_u_, sk_u_commitment_);
     let res = circuit_.closure(builder.pool(0), &range);
     builder.assigned_instances[0] = res;
 
