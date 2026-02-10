@@ -10,6 +10,8 @@ use halo2_base::halo2_proofs::{
     },
     plonk::Fixed,
 };
+use halo2_base::gates::flex_gate::threads::SinglePhaseCoreManager;
+use halo2_base::AssignedValue;
 use halo2_base::utils::fs::gen_srs;
 use halo2_base::utils::testing::check_proof_with_instances;
 use halo2_base::utils::testing::gen_proof_with_instances;
@@ -54,9 +56,14 @@ use rand::rngs::OsRng;
 
 use halo2_base::gates::circuit::{builder::RangeCircuitBuilder, CircuitBuilderStage};
 
+#[test]
+fn generate_and_backup_kzg_params_test() {
+    let k = 8;
+    setup_and_backup_kzg_params(k, "kzg_params.bin".to_string());
+}
 
 #[test]
-fn full_test() {
+fn full_raw_test() {
     let k = 12u32;
     let lookup_bits = k as usize - 1;
     let unusable_rows = 9;
@@ -109,6 +116,10 @@ fn full_test() {
         file.write_all(&value.to_le_bytes()).unwrap();
     }
     
+    let config_params_serialized = serde_json::to_string(&config_params).unwrap();
+
+    println!("config_params_serialized: {:?}", config_params_serialized);
+
     let mut builder = RangeCircuitBuilder::prover(config_params.clone(), break_points).use_instance_columns(1 as usize);
     let range = RangeChip::new(lookup_bits, builder.lookup_manager().clone());
    
@@ -134,10 +145,48 @@ fn full_test() {
     println!("proof: {:?}", proof);
 
     check_proof_with_instances(&params, &vk, &proof, &[&pub_inputs],  true);
+
+    let invalid_instances = vec![Fr::one(), Fr::one(), Fr::one()];
+
+    check_proof_with_instances(&params, &vk, &proof, &[&invalid_instances],  false);
 }
 
+#[test]
+fn test_1() {
+    let k = 12u32;
+    let lookup_bits = k as usize - 1;
+    let unusable_rows = 9;
+    let use_instance_columns = true;
+    let num_instance_columns  = 1;
+    let params = setup_and_backup_kzg_params(k, "kzg.bin".to_string());
+    let verification_key_path = "verification_key.bin".to_string();
+    let proof_key_path = "proof_key.bin".to_string();
+    let break_points_path = "break_points.bin".to_string();
+    let config_params_path = "config_params.bin".to_string();
+
+    let f = |core: &mut SinglePhaseCoreManager<Fr>, range: &RangeChip<Fr>| -> Vec<Vec<AssignedValue<Fr>>>{
+        let circuit: DarkDexCircuit = DarkDexCircuit::default(k, unusable_rows);
+        let res = circuit.closure(core, range);
+        vec![res]
+    };
+
+    generate_keys_and_backup_for_circuit_builder(
+        k,
+        use_instance_columns,
+        num_instance_columns,
+        unusable_rows,
+        &params,
+        verification_key_path,
+        proof_key_path,
+        break_points_path,
+        config_params_path,
+        f
+    );
 
 
+}
+
+/////
 #[test]
 fn t() {
     let k = 12u32;
@@ -337,11 +386,7 @@ fn kzg_test_raw() {
 
 /*
 /////////////////
-#[test]
-fn generate_and_backup_kzg_params_test() {
-    let k = 8;
-    setup_and_backup_kzg_params(k, "kzg_params.bin".to_string());
-}
+
 
 #[test]
 fn generate_and_backup_verification_key_test() {

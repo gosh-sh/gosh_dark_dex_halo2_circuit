@@ -21,14 +21,8 @@ use halo2_base::halo2_proofs::{
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
-//use halo2_base::halo2_proofs::plonk::
-
-/*use halo2_proofs::SerdeFormat;
-
-use halo2_proofs::poly::{
-    Basis, Coeff, LagrangeCoeff, Polynomial, ProverQuery,
-    commitment::{Blind, CommitmentScheme, Params, Prover},
-};*/
+use halo2_base::utils::testing::{gen_proof, gen_proof_with_instances, check_proof, check_proof_with_instances};
+use std::panic;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Proof(Vec<u8>);
@@ -40,71 +34,39 @@ impl Proof {
         params: &ParamsKZG<Bn256>,
         pk: &ProvingKey<G1Affine>,
         circuit: C,
-        instances: &[&[Fr]],
-        rng: impl RngCore,
-    ) -> Result<Self, plonk::Error> {
-        let mut transcript = Blake2bWrite::<_, <Bn256 as Engine>::G1Affine, _>::init(Vec::new());
-        plonk::create_proof::<KZGCommitmentScheme<Bn256>, ProverSHPLONK<Bn256>, _, _, _, _>(
-            params,
-            pk,
-            &[circuit],
-            &[instances],
-            rng,
-            &mut transcript,
-        )?;
-        Ok(Self(transcript.finalize()))
+        pub_inputs: &Vec<Fr>,
+    ) -> Vec<u8> {
+        gen_proof_with_instances(&params, &pk, circuit, &[pub_inputs])
     }
 
-   /* // TODO: this should be generic, as `create` above
-    /// Verifies this proof with the given instances.
     pub fn verify_with_vk_from_bytes<C: Circuit<Fr>>(
         &self,
         mut vk_slice: &[u8],
         params: &ParamsKZG<Bn256>,
-        instances: &[&[Fr]],
-    ) -> Result<(), plonk::Error> {
-        let vk: VerifyingKey<G1Affine> =
-            VerifyingKey::read::<_, C>(&mut vk_slice, SerdeFormat::RawBytesUnchecked)
-                .expect("Reading vkey should not fail");
-        self.verify(&vk, params, instances)
-    }*/
+        concrete_params: C::Params,
+        pub_inputs: &Vec<Fr>,
+    ) -> bool  {
+        let vk: VerifyingKey<G1Affine> = VerifyingKey::read::<_, C>(&mut vk_slice, SerdeFormat::RawBytesUnchecked, concrete_params).expect("Reading vkey should not fail");
+        ;
+        match panic::catch_unwind(|| {
+            check_proof_with_instances(&params, &vk, &self.0.clone(), &[pub_inputs],  true);
+        }) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
 
-    // TODO: this should be generic, as `create` above
-    /// Verifies this proof with the given instances.
-   /* pub fn verify_with_vk_from_path<C: Circuit<Fr>>(
+   pub fn verify_with_vk_from_path<C: Circuit<Fr>>(
         &self,
         vk_path: String,
         params: &ParamsKZG<Bn256>,
-        instances: &[&[Fr]],
-    ) -> Result<(), plonk::Error> {
-        let mut vk_bytes: Vec<u8> = std::fs::read(vk_path).unwrap();
-        let mut vk_slice: &[u8] = &vk_bytes;
-        let vk: VerifyingKey<G1Affine> =
-            VerifyingKey::read::<_, C>(&mut vk_slice, SerdeFormat::RawBytesUnchecked)
-                .expect("Reading vkey should not fail");
-        self.verify(&vk, params, instances)
-    }*/
-
-    // TODO: this should be generic, as `create` above
-    /// Verifies this proof with the given instances.
-    #[allow(dead_code)]
-    pub fn verify(
-        &self,
-        vk: &VerifyingKey<G1Affine>,
-        params: &ParamsKZG<Bn256>,
-        instances: &[&[Fr]],
-    ) -> Result<(), plonk::Error> {
-        let strategy = SingleStrategy::new(params);
-        let mut transcript =
-            Blake2bRead::<_, <Bn256 as Engine>::G1Affine, _>::init(Cursor::new(self.0.clone()));
-        plonk::verify_proof::<_, VerifierSHPLONK<_>, _, _, _>(
-            params.verifier_params(),
-            vk,
-            strategy,
-            &[instances],
-            &mut transcript,
-        )
+        concrete_params: C::Params,
+        pub_inputs: &Vec<Fr>,
+    ) -> bool {
+        let mut vk_slice: &[u8] = &std::fs::read(vk_path).unwrap();
+        self.verify_with_vk_from_bytes::<C>(vk_slice, params, concrete_params, pub_inputs)
     }
+
 
     /// Constructs a new Proof value.
     pub fn new(bytes: Vec<u8>) -> Self {
