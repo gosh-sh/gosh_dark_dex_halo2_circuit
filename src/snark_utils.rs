@@ -1,6 +1,6 @@
-use halo2_proofs::{
+use halo2_base::halo2_proofs::{
     halo2curves::bn256::{Bn256, G1Affine},
-    plonk::{Circuit, Error, create_proof, keygen_pk, keygen_vk, verify_proof},
+    plonk::{Circuit, Error, create_proof, keygen_pk, keygen_vk, verify_proof, ProvingKey, VerifyingKey},
     poly::{
         commitment::ParamsProver,
         kzg::{
@@ -14,11 +14,7 @@ use halo2_proofs::{
     },
 };
 
-use halo2_proofs::plonk::*;
-
 use crate::proof::*;
-use halo2_proofs::SerdeFormat;
-use halo2_proofs::plonk::{ProvingKey, VerifyingKey};
 
 use crate::circuit::*;
 use halo2_base::halo2_proofs::{
@@ -37,7 +33,7 @@ pub fn setup(k: u32) -> ParamsKZG<Bn256> {
     ParamsKZG::new(k)
 }
 
-pub fn setup_and_backup_kzg_params(k: u32, path: String) {
+/*pub fn setup_and_backup_kzg_params(k: u32, path: String) {
     let params: ParamsKZG<Bn256> = ParamsKZG::new(k);
     let mut params_buf: Vec<u8> = Vec::new();
     let _ = params
@@ -108,4 +104,4 @@ pub fn generate_verififcation_key_without_witness_and_backup<C: Circuit<Fr> + De
 
     //println!("vk1 = {:?}", hex::encode(vk1_buf.clone()));
     std::fs::write(path, vk1_buf).unwrap();
-}
+}*/

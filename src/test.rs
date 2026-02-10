@@ -1,14 +1,19 @@
 use crate::circuit::*;
 use crate::proof::*;
+use crate::poseidon::*;
 use crate::snark_utils::*;
 use halo2_base::halo2_proofs::{
     arithmetic::CurveAffine,
     halo2curves::{
-        bn256::Fr,
+        bn256::{Fr, Bn256, G1Affine},
         secp256k1::{Fp, Fq, Secp256k1Affine},
     },
     plonk::Fixed,
 };
+use halo2_base::utils::fs::gen_srs;
+use halo2_base::utils::testing::check_proof_with_instances;
+use halo2_base::utils::testing::gen_proof_with_instances;
+use halo2_base::utils::testing::{gen_proof, check_proof};
 use halo2_base::halo2_proofs::{
     circuit::Layouter,
     circuit::SimpleFloorPlanner,
@@ -16,27 +21,22 @@ use halo2_base::halo2_proofs::{
     dev::MockProver,
     halo2curves::bn256,
     halo2curves::secp256k1,
-    plonk::{self, Advice, Circuit, Column, ConstraintSystem, Expression, Instance, Selector},
-};
-use halo2_proofs::SerdeFormat;
-use halo2_proofs::halo2curves::ff::PrimeField;
-use halo2_proofs::plonk::VerifyingKey;
-use halo2_proofs::{
-    halo2curves::bn256::{Bn256, G1Affine},
-    plonk::{Error, create_proof, keygen_pk, keygen_vk, verify_proof},
+    plonk::{self, Advice, Circuit, Column, ConstraintSystem, Expression, Instance, Selector, ProvingKey, VerifyingKey, keygen_vk, keygen_pk, create_proof, verify_proof},
     poly::{
         commitment::ParamsProver,
         kzg::{
             commitment::{KZGCommitmentScheme, ParamsKZG},
-            multiopen::{ProverSHPLONK, VerifierSHPLONK},
-            strategy::SingleStrategy,
+            multiopen::VerifierSHPLONK,
         },
+        kzg::{multiopen::ProverSHPLONK, strategy::SingleStrategy},
     },
     transcript::{
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     },
+    SerdeFormat
 };
 
+use halo2_base::gates::RangeChip;
 use halo2_base::utils::ScalarField;
 use rand::random;
 use std::{
@@ -46,28 +46,107 @@ use std::{
     rc::Rc,
 };
 
+use halo2_base::gates::circuit::builder::BaseCircuitBuilder;
+
 use rand::rngs::OsRng;
 
-use halo2_ecc::fields::PrimeField as OtherPrimeField;
+//use halo2_ecc::fields::PrimeField as OtherPrimeField;
 
+use halo2_base::gates::circuit::{builder::RangeCircuitBuilder, CircuitBuilderStage};
 #[test]
-fn test () {
-   // let data_to_hash = [sk_u_commitment, private_note_sum, token_type, sk_u];
+fn t() {
+    let k = 12u32;
+    let lookup_bits = k as usize - 1;
+    let unusable_rows = 9;
 
-    //let input_bytes = [0u8; 32];
-    //let t = [Fr::from_bytes(&input_bytes).unwrap()];
+    let sk_u = 0u64;
+    let token_type = 0u64;
+    let private_note_sum = 0u64;
+    let sk_u = Fr::from(sk_u);
+    let token_type = Fr::from(token_type);
+    let private_note_sum = Fr::from(private_note_sum);
+    let sk_u_commitment = poseidon_hash(&[sk_u, Fr::zero()]);
+    let data_to_hash = [sk_u_commitment, private_note_sum, token_type, sk_u];
+    let digest = poseidon_hash(&data_to_hash);
+    //let mut pub_inputs: Vec<Fr> = vec![private_note_sum, token_type, digest];
 
-    let t2 = Fr::from(0u64);
-    println!("t2: {:?}", t2.to_bytes());
-    let digest = poseidon_hash([Fr::zero()]);
 
-    println!("{:?}", hex::encode(digest.to_bytes()));
+    let mut builder =
+            RangeCircuitBuilder::from_stage(CircuitBuilderStage::Keygen).use_k(k as usize).use_instance_columns(1 as usize);
+    builder.set_lookup_bits(lookup_bits);
+    let range = RangeChip::new(lookup_bits, builder.lookup_manager().clone());
+    let circuit: DarkDexCircuit = DarkDexCircuit::new(k, token_type, private_note_sum, sk_u, sk_u_commitment);
+    let res = circuit.closure(builder.pool(0), &range);
+    builder.assigned_instances[0] = res;
+    
+    let t_cells_lookup = builder.lookup_manager().iter().map(|lm| lm.total_rows()).sum::<usize>();
+    let lookup_bits_ = if t_cells_lookup == 0 { None } else { Some(lookup_bits) };
+    builder.config_params.lookup_bits = lookup_bits_;
 
+    let config_params = builder.calculate_params(Some(unusable_rows));
+
+    let params = gen_srs(k);
+    let vk = keygen_vk(&params, &builder).unwrap();
+    let pk = keygen_pk(&params, vk.clone(), &builder).unwrap();
+
+   /* let mut vk1_buf: Vec<u8> = Vec::new();
+    vk
+        .write(&mut vk1_buf, SerdeFormat::RawBytesUnchecked)
+        .unwrap();
+
+    std::fs::write("verification_key.bin".to_string(), vk1_buf).unwrap();*/
+
+    let mut vk_bytes: Vec<u8> = std::fs::read("verification_key.bin".to_string()).unwrap();
+    let mut vk_slice: &[u8] = &vk_bytes;
+    let vk_unknown: VerifyingKey<G1Affine> = VerifyingKey::read::<_, BaseCircuitBuilder<Fr>>(&mut vk_slice, SerdeFormat::RawBytesUnchecked, builder.params()).expect("Reading vkey should not fail");
+
+
+    /////
+    /// 
+    
+
+    let break_points = builder.break_points();
+    println!("break_points: {:?}", break_points.len());
+    println!("break_points: {:?}", break_points[0].len());
+    println!("break_points: {:?}", break_points);
+    drop(builder);
+
+
+    let mut builder = RangeCircuitBuilder::prover(config_params.clone(), break_points).use_instance_columns(1 as usize);
+    let range = RangeChip::new(lookup_bits, builder.lookup_manager().clone());
    
+    let sk_u_ = random::<u64>();
+    let token_type_ = 10u64;
+    let private_note_sum_ = 1000u64;
+    let sk_u_ = Fr::from(sk_u_);
+    let token_type_ = Fr::from(token_type_);
+    let private_note_sum_ = Fr::from(private_note_sum_);
+    let sk_u_commitment_ = poseidon_hash(&[sk_u_, Fr::zero()]);
+    let data_to_hash_ = [sk_u_commitment_, private_note_sum_, token_type_, sk_u_];
+    let digest_ = poseidon_hash(&data_to_hash_);
+    let mut pub_inputs: Vec<Fr> = vec![private_note_sum_, token_type_, digest_];
+
+    //let instances = vec![vec![private_note_sum_, token_type_, digest_]];
+
+
+    let circuit_: DarkDexCircuit = DarkDexCircuit::new(k, token_type_, private_note_sum_, sk_u_, sk_u_commitment_);
+    let res = circuit_.closure(builder.pool(0), &range);
+    builder.assigned_instances[0] = res;
+
+    let proof = gen_proof_with_instances(&params, &pk, builder, &[&pub_inputs]);
+    
+    let proof_size = proof.len();
+
+    println!("proof: {:?}", proof);
+
+   // let mut pub_inputs_: Vec<Fr> = vec![private_note_sum_, digest_, token_type_];
+
+    check_proof_with_instances(&params, &vk_unknown, &proof, &[&pub_inputs],  true);
 }
 
-#[test]
+/*#[test]
 fn kzg_test_raw() {
+    let k = 12u32;
     let sk_u = random::<u64>();
     let token_type = 1u64;
     let private_note_sum = 1000u64;
@@ -78,36 +157,60 @@ fn kzg_test_raw() {
     let token_type = Fr::from(token_type);
     let private_note_sum = Fr::from(private_note_sum);
 
-    let sk_u_commitment = poseidon_hash([sk_u, Fr::zero()]);
+    let sk_u_commitment = poseidon_hash(&[sk_u, Fr::zero()]);
 
     let data_to_hash = [sk_u_commitment, private_note_sum, token_type, sk_u];
 
-    let digest = poseidon_hash(data_to_hash);
+    let digest = poseidon_hash(&data_to_hash);
 
     let mut pub_inputs = vec![private_note_sum, token_type, digest];
 
     //////
 
-    let params: ParamsKZG<Bn256> = setup(8);
-    let circuit: DarkDexCircuit = DarkDexCircuit::new(
-        Some(token_type),
-        Some(private_note_sum),
-        Some(sk_u),
-        Some(sk_u_commitment),
-    );
+    let params: ParamsKZG<Bn256> = setup(k);
+    
+    let circuit: DarkDexCircuit = DarkDexCircuit::new(k, token_type, private_note_sum, sk_u, sk_u_commitment);
+    let mut builder = circuit.create_keygen();//.create_keygen_use_unknown();
+    let unusable_rows = 9;
 
-    //let prover = MockProver::run(8, &circuit, vec![pub_inputs.clone()]).unwrap();
-    //assert_eq!(prover.verify(), Ok(()));
+    let t_cells_lookup = builder.lookup_manager().iter().map(|lm| lm.total_rows()).sum::<usize>();
+        
+    let lookup_bits = if t_cells_lookup == 0 { None } else { builder.lookup_bits() };
+    builder.config_params.lookup_bits = lookup_bits;
 
-    let vk = keygen_vk(&params, &circuit).unwrap();
-    let pk = keygen_pk(&params, vk, &circuit).unwrap();
+    builder.calculate_params(Some(unusable_rows));
+
+    
+
+
+    /*let vk_unknown = keygen_vk(&params, &builder).unwrap();
+    //println!("vk = {:?}", vk);
+
+    let mut vk1_buf: Vec<u8> = Vec::new();
+    vk_unknown
+        .write(&mut vk1_buf, SerdeFormat::RawBytesUnchecked)
+        .unwrap();
+
+    std::fs::write("verification_key.bin".to_string(), vk1_buf).unwrap();*/
+
+
+    ///////
+    /// 
+    
+    let mut vk_bytes: Vec<u8> = std::fs::read("verification_key.bin".to_string()).unwrap();
+    let mut vk_slice: &[u8] = &vk_bytes;
+    let vk_unknown: VerifyingKey<G1Affine> = VerifyingKey::read::<_, BaseCircuitBuilder<Fr>>(&mut vk_slice, SerdeFormat::RawBytesUnchecked, builder.params()).expect("Reading vkey should not fail");
+
+    let vk = keygen_vk(&params, &builder).unwrap();
+    let pk = keygen_pk(&params, vk.clone(), &builder).unwrap();
 
     let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
 
+    let mut builder = circuit.create_prover(builder.clone().config_params, builder.clone().break_points());
     create_proof::<KZGCommitmentScheme<Bn256>, ProverSHPLONK<_>, _, _, _, _>(
         &params,
         &pk,
-        &[circuit],
+        &[builder],
         &[&[&pub_inputs]],
         OsRng,
         &mut transcript,
@@ -118,15 +221,27 @@ fn kzg_test_raw() {
 
     println!("proof len = {:?}", proof.len());
 
-    let empty_circuit: DarkDexCircuit = DarkDexCircuit::default();
-    let vk_from_empty = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
+    /*let empty_circuit: DarkDexCircuit = DarkDexCircuit::default();
+    let vk_from_empty = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");*/
+
+    
+
 
     let strategy = SingleStrategy::new(&params);
+    let verifier_params = params.verifier_params();
     let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
     assert!(
-        verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<_>, _, _, _>(
-            &params,
-            &vk_from_empty,
+        verify_proof::<
+        KZGCommitmentScheme<Bn256>,
+        VerifierSHPLONK<'_, Bn256>,
+        Challenge255<G1Affine>,
+        Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
+        SingleStrategy<'_, Bn256>,
+        >
+        /*<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<_>, _, _, _>*/
+        (
+            &verifier_params,
+            &vk_unknown,
             strategy,
             &[&[&pub_inputs]],
             //&[&[]],
@@ -134,8 +249,9 @@ fn kzg_test_raw() {
         )
         .is_ok()
     );
-}
+}*/
 
+/*
 /////////////////
 #[test]
 fn generate_and_backup_kzg_params_test() {
@@ -218,4 +334,4 @@ fn verifier_sketch_test() {
     );
 
     assert!(res.is_ok());
-}
+}*/

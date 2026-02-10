@@ -15,17 +15,20 @@ use halo2_base::halo2_proofs::{
         },
         kzg::{multiopen::ProverSHPLONK, strategy::SingleStrategy},
     },
+    SerdeFormat,
     transcript::{Blake2bRead, Blake2bWrite, TranscriptReadBuffer, TranscriptWriterBuffer},
 };
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
-use halo2_proofs::SerdeFormat;
+//use halo2_base::halo2_proofs::plonk::
+
+/*use halo2_proofs::SerdeFormat;
 
 use halo2_proofs::poly::{
     Basis, Coeff, LagrangeCoeff, Polynomial, ProverQuery,
     commitment::{Blind, CommitmentScheme, Params, Prover},
-};
+};*/
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Proof(Vec<u8>);
@@ -52,7 +55,7 @@ impl Proof {
         Ok(Self(transcript.finalize()))
     }
 
-    // TODO: this should be generic, as `create` above
+   /* // TODO: this should be generic, as `create` above
     /// Verifies this proof with the given instances.
     pub fn verify_with_vk_from_bytes<C: Circuit<Fr>>(
         &self,
@@ -64,11 +67,11 @@ impl Proof {
             VerifyingKey::read::<_, C>(&mut vk_slice, SerdeFormat::RawBytesUnchecked)
                 .expect("Reading vkey should not fail");
         self.verify(&vk, params, instances)
-    }
+    }*/
 
     // TODO: this should be generic, as `create` above
     /// Verifies this proof with the given instances.
-    pub fn verify_with_vk_from_path<C: Circuit<Fr>>(
+   /* pub fn verify_with_vk_from_path<C: Circuit<Fr>>(
         &self,
         vk_path: String,
         params: &ParamsKZG<Bn256>,
@@ -80,7 +83,7 @@ impl Proof {
             VerifyingKey::read::<_, C>(&mut vk_slice, SerdeFormat::RawBytesUnchecked)
                 .expect("Reading vkey should not fail");
         self.verify(&vk, params, instances)
-    }
+    }*/
 
     // TODO: this should be generic, as `create` above
     /// Verifies this proof with the given instances.

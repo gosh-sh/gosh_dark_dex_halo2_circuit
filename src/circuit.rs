@@ -1,22 +1,33 @@
+use crate::proof::*;
+use crate::poseidon::*;
 use std::marker::PhantomData;
 
+use halo2_base::AssignedValue;
 use halo2_base::halo2_proofs::{
     arithmetic::CurveAffine,
-    halo2curves::{bn256::Fr, secp256k1::{Fp, Fq, Secp256k1Affine}},
+    halo2curves::{bn256::{Fr, Bn256}},
     plonk::Fixed,
 };
 use halo2_base::utils::BigPrimeField;
 use rand::random;
 use halo2_ecc::fields::FpStrategy;
 
+use halo2_base::gates::flex_gate::MultiPhaseThreadBreakPoints;
+
+use halo2_base::gates::circuit::{builder::RangeCircuitBuilder, CircuitBuilderStage};
 use std::fs::File;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use serde::Deserialize;
 
 use halo2_base::gates::circuit::builder::*;
+use halo2_base::gates::circuit::BaseCircuitParams;
 
 use halo2_base::gates::RangeChip;
+
+use halo2_base::gates::flex_gate::threads::SinglePhaseCoreManager;
+
 
 use halo2_ecc::secp256k1::FqChip;
 use halo2_ecc::secp256k1::FpChip;
@@ -27,35 +38,29 @@ use halo2_ecc::ecc::fixed_base;
 use halo2_ecc::ecc::scalar_multiply;
 
 use halo2_base::{
+    Context,
     utils::{CurveAffineExt},
 };
-
+use rand_core::OsRng;
 use halo2_base::poseidon::hasher::{spec::OptimizedPoseidonSpec, PoseidonHasher};
 
 use halo2_base::halo2_proofs::{
+    
     circuit::SimpleFloorPlanner,
     circuit::Layouter,
     circuit::Value,
     dev::MockProver,
     halo2curves::secp256k1,
     halo2curves::bn256,
+    plonk::{keygen_pk, keygen_vk},
     plonk::{self, Advice, ConstraintSystem, Circuit, Column, Instance, Expression, Selector},
+    poly::kzg::commitment::{ParamsKZG}
 };
 use halo2_base::gates::RangeInstructions;
-use pse_poseidon::Poseidon;
-const T: usize = 3;
-const RATE: usize = 2;
-const R_F: usize = 8;
-const R_P: usize = 57;
 
-pub fn poseidon_hash(message: &[Fr]) -> Fr {
-    let mut native_sponge = Poseidon::<Fr, T, RATE>::new(R_F, R_P);
-    native_sponge.update(message);
-    native_sponge.squeeze()
-}
 
 //#[derive(Default)]
-struct DarkDexCircuit {
+pub struct DarkDexCircuit {
     pub k: u32,
     pub lookup_bits: usize,
     pub token_type: Fr,
@@ -84,22 +89,27 @@ impl DarkDexCircuit {
         }
     }
 
-    pub fn create(&self) -> BaseCircuitBuilder<Fr> {
+    pub fn create_mock(&self) -> BaseCircuitBuilder<Fr> {
         let mut builder = RangeCircuitBuilder::default().use_k(self.k as usize).use_instance_columns(1 as usize);
         builder.set_lookup_bits(self.lookup_bits);
-
         let range = RangeChip::new(self.lookup_bits, builder.lookup_manager().clone());
+        let mut instances = self.closure(builder.pool(0), &range);
+        builder.assigned_instances[0] = instances;
+        builder
+    }
 
-        let ctx = builder.pool(0).main();
-
-        let spec = OptimizedPoseidonSpec::<Fr, T, RATE>::new::<R_F, R_P, 0>();
-        let mut hasher = PoseidonHasher::<Fr, T, RATE>::new(spec);
-        hasher.initialize_consts(ctx, range.gate());
+   
+    pub fn closure(&self, core: &mut SinglePhaseCoreManager<Fr>, range: &RangeChip<Fr>) -> Vec<AssignedValue<Fr>>{
+        let ctx = core.main();
 
         let values = [self.sk_u, Fr::zero()];
         let inputs = ctx.assign_witnesses(values.clone());
         let len = ctx.load_witness(Fr::from(inputs.len() as u64));
-        let hasher_result = hasher.hash_var_len_array(ctx, &range, &inputs, len);
+
+        let spec = OptimizedPoseidonSpec::<Fr, T, RATE>::new::<R_F, R_P, 0>();
+        let mut hasher = PoseidonHasher::<Fr, T, RATE>::new(spec);
+        hasher.initialize_consts(ctx, range.gate());
+        let hasher_result = hasher.hash_var_len_array(ctx, range, &inputs, len);
 
         let values = [self.sk_u_commitment];
         let sk_u_commitment_cell = ctx.assign_witnesses(values.clone())[0];
@@ -111,40 +121,37 @@ impl DarkDexCircuit {
         let mut inputs = vec![sk_u_commitment_cell];
         inputs.append(&mut inputs_);
         let len = ctx.load_witness(Fr::from(inputs.len() as u64));
-        let final_hasher_result = hasher.hash_var_len_array(ctx, &range, &inputs, len);
+        let final_hasher_result = hasher.hash_var_len_array(ctx, range, &inputs, len);
 
         println!("final_hasher_result = {:?}", final_hasher_result.value());
-
 
         let values = [self.private_note_sum, self.token_type];
         let mut instances = ctx.assign_witnesses(values.clone());
         instances.push(final_hasher_result);
-
-        builder.assigned_instances[0] = instances;
-
-        builder
-
+        return instances;
+        
     }
 }
 
-/*pub fn generate_proof(
+pub fn generate_proof(
+    k: u32,
     params: &ParamsKZG<Bn256>,
-    token_type: Option<Fr>,
-    private_note_sum: Option<Fr>,
-    sk_u: Option<Fr>,
-    sk_u_commitment: Option<Fr>,
+    token_type: Fr,
+    private_note_sum: Fr,
+    sk_u: Fr,
+    sk_u_commitment: Fr,
 ) -> Result<Proof, plonk::Error> {
-    let circuit: DarkDexCircuit =
-        DarkDexCircuit::new(token_type, private_note_sum, sk_u, sk_u_commitment);
+    let circuit =
+        DarkDexCircuit::new(k, token_type, private_note_sum, sk_u, sk_u_commitment).create_mock();
     let now = Instant::now();
     let vk = keygen_vk(params, &circuit).unwrap();
     let pk = keygen_pk(params, vk.clone(), &circuit).unwrap();
-    let public_inputs = circuit.public_inputs();
+    let public_inputs: Vec<Fr> = circuit.assigned_instances[0].iter().map(|v| *v.value()).collect();
     let proof = Proof::create(&params, &pk, circuit, &[&public_inputs], OsRng);
     let end = now.elapsed().as_millis();
-    //println!("Dark Dex circuit proof generation time: {:?}", end);
+    println!("Dark Dex circuit proof generation time: {:?}", end);
     proof
-}*/
+}
 
 #[test]
 fn simple_test() {
@@ -163,7 +170,7 @@ fn simple_test() {
     println!("sk_u_commitment {:?}", sk_u_commitment);
 
     let circuit: DarkDexCircuit = DarkDexCircuit::new(k, token_type, private_note_sum, sk_u, sk_u_commitment);
-    let mut builder = circuit.create();
+    let mut builder = circuit.create_mock();
     let unusable_rows = 9;
 
     let t_cells_lookup = builder.lookup_manager().iter().map(|lm| lm.total_rows()).sum::<usize>();
@@ -187,4 +194,9 @@ fn simple_test() {
     let instances = vec![vec![private_note_sum, token_type, digest]];
         
     MockProver::run(k, &builder, instances).unwrap().assert_satisfied();
+
+    let invalid_instances = vec![vec![private_note_sum, digest, token_type]];
+
+    assert!(MockProver::run(k, &builder, invalid_instances).unwrap().verify().is_ok() == false);
+
 }
