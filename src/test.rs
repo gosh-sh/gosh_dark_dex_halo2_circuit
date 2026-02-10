@@ -10,6 +10,7 @@ use halo2_base::halo2_proofs::{
     },
     plonk::Fixed,
 };
+use halo2_base::gates::circuit::BaseCircuitParams;
 use halo2_base::gates::flex_gate::threads::SinglePhaseCoreManager;
 use halo2_base::AssignedValue;
 use halo2_base::utils::fs::gen_srs;
@@ -113,7 +114,8 @@ fn full_raw_test() {
     // Write the u16 data as bytes in little-endian order
     for value in break_points_ {
         let v = value as u16;
-        file.write_all(&value.to_le_bytes()).unwrap();
+        println!("&value.to_le_bytes(): {:?}", &value.to_le_bytes()[0..2]);
+        file.write_all(&value.to_le_bytes()[0..2]).unwrap();
     }
     
     let config_params_serialized = serde_json::to_string(&config_params).unwrap();
@@ -159,10 +161,21 @@ fn test_1() {
     let use_instance_columns = true;
     let num_instance_columns  = 1;
     let params = setup_and_backup_kzg_params(k, "kzg.bin".to_string());
-    let verification_key_path = "verification_key.bin".to_string();
-    let proof_key_path = "proof_key.bin".to_string();
-    let break_points_path = "break_points.bin".to_string();
-    let config_params_path = "config_params.bin".to_string();
+    let verification_key_path = "verification_key.bin";
+    let proof_key_path = "proof_key.bin";
+    let break_points_path = "break_points.bin";
+    let config_params_path = "config_params.bin";
+
+    let sk_u_ = random::<u64>();
+    let token_type_ = 10u64;
+    let private_note_sum_ = 1000u64;
+    let sk_u_ = Fr::from(sk_u_);
+    let token_type_ = Fr::from(token_type_);
+    let private_note_sum_ = Fr::from(private_note_sum_);
+    let sk_u_commitment_ = poseidon_hash(&[sk_u_, Fr::zero()]);
+    let data_to_hash_ = [sk_u_commitment_, private_note_sum_, token_type_, sk_u_];
+    let digest_ = poseidon_hash(&data_to_hash_);
+    let mut pub_inputs: Vec<Fr> = vec![private_note_sum_, token_type_, digest_];
 
     let f = |core: &mut SinglePhaseCoreManager<Fr>, range: &RangeChip<Fr>| -> Vec<Vec<AssignedValue<Fr>>>{
         let circuit: DarkDexCircuit = DarkDexCircuit::default(k, unusable_rows);
@@ -176,14 +189,31 @@ fn test_1() {
         num_instance_columns,
         unusable_rows,
         &params,
-        verification_key_path,
-        proof_key_path,
-        break_points_path,
-        config_params_path,
+        verification_key_path.to_string(),
+        proof_key_path.to_string(),
+        break_points_path.to_string(),
+        config_params_path.to_string(),
         f
     );
 
+    let f = |core: &mut SinglePhaseCoreManager<Fr>, range: &RangeChip<Fr>| -> Vec<Vec<AssignedValue<Fr>>>{
+        let circuit: DarkDexCircuit = DarkDexCircuit::new(k, unusable_rows, token_type_, private_note_sum_, sk_u_, sk_u_commitment_);
+        let res = circuit.closure(core, range);
+        vec![res]
+    };
 
+    let proof = Proof::create_for_curcuit_builder(k, use_instance_columns, num_instance_columns, &params,break_points_path.to_string(), config_params_path.to_string(), proof_key_path.to_string(), &[&pub_inputs], f);
+
+    let mut file = File::open(config_params_path.to_string()).unwrap();
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).unwrap();
+    let concrete_params:  BaseCircuitParams = serde_json::from_str(&contents).expect("JSON was not well-formatted");
+    println!("config_params: {:?}", concrete_params);
+
+    let res = proof.verify_with_vk_from_path::<BaseCircuitBuilder<Fr>>(verification_key_path.to_string(), &params, concrete_params, &[&pub_inputs]);
+
+    println!("res: {:?}", res);
+    assert!(res);
 }
 
 /////

@@ -126,7 +126,7 @@ pub fn generate_keys_and_backup_for_circuit_builder(
     verification_key_path: String,
     proof_key_path: String,
     break_points_path: String,
-    confifg_params_path: String,
+    config_params_path: String,
     f: impl FnOnce(&mut SinglePhaseCoreManager<Fr>, &RangeChip<Fr>) -> Vec<Vec<AssignedValue<Fr>>>
 ) {
     let mut builder = RangeCircuitBuilder::from_stage(CircuitBuilderStage::Keygen).use_k(k as usize);
@@ -155,7 +155,7 @@ pub fn generate_keys_and_backup_for_circuit_builder(
     let config_params = builder.calculate_params(Some(unusable_rows));
     let config_params_json = serde_json::to_string(&config_params).unwrap();
     println!("config_params_json: {:?}", config_params_json);
-    let mut file = File::create(confifg_params_path).unwrap();
+    let mut file = File::create(config_params_path).unwrap();
     file.write_all(config_params_json.as_bytes()).unwrap();
     
     let vk = keygen_vk(params, &builder).unwrap();
@@ -187,6 +187,6 @@ pub fn generate_keys_and_backup_for_circuit_builder(
     let mut file = File::create(break_points_path.to_string()).unwrap();
     for value in break_points_ {
         let v = value as u16;
-        file.write_all(&value.to_le_bytes()).unwrap();
+        file.write_all(&value.to_le_bytes()[0..2]).unwrap();
     }
 }
