@@ -304,6 +304,21 @@ fn test_verify_using_keys_from_path() {
     assert!(res);
 }
 
+#[test]
+fn test_read()  {
+    let verification_key_path = "verification_key.bin";
+    let mut vk_slice: &[u8] = &std::fs::read(verification_key_path).unwrap();
+    println!("vk: {:?}", vk_slice);
+    println!("vk len: {:?}", vk_slice.len());
+}
+
+#[test]
+fn test_read_2()  {
+    let path = "./params/kzg_bn254_12.srs";
+    let mut kzg_slice: &[u8] = &std::fs::read(path).unwrap();
+    println!("kzg: {:?}", kzg_slice);
+    println!("kzg len: {:?}", kzg_slice.len());
+}
 /////
 #[test]
 fn t() {

@@ -46,6 +46,14 @@ use std::{
     rc::Rc,
 };
 
+pub fn read_kzg_params(path: String) -> ParamsKZG<Bn256> {
+    let mut params_buf: Vec<u8> = std::fs::read(path).unwrap();
+    let mut params_slice: &[u8] = &params_buf;
+    let params = ParamsKZG::<Bn256>::read_custom(&mut params_slice, SerdeFormat::RawBytesUnchecked)
+        .expect("Reading vkey should not fail");
+    params
+}
+
 /*pub fn setup(k: u32) -> ParamsKZG<Bn256> {
     ParamsKZG::new(k)
 }
@@ -60,14 +68,7 @@ pub fn setup_and_backup_kzg_params(k: u32, path: String) -> ParamsKZG<Bn256> {
     std::fs::write(path, params_buf).unwrap();
     params
 }
-
-pub fn read_kzg_params(path: String) -> ParamsKZG<Bn256> {
-    let mut params_buf: Vec<u8> = std::fs::read(path).unwrap();
-    let mut params_slice: &[u8] = &params_buf;
-    let params = ParamsKZG::<Bn256>::read_custom(&mut params_slice, SerdeFormat::RawBytesUnchecked)
-        .expect("Reading vkey should not fail");
-    params
-}*/
+*/
 
 /*pub fn generate_keys<C: Circuit<Fr>>(
     k: u32,
