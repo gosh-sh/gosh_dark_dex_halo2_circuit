@@ -319,6 +319,15 @@ fn test_read_2()  {
     println!("kzg: {:?}", kzg_slice);
     println!("kzg len: {:?}", kzg_slice.len());
 }
+
+#[test]
+fn test_read_3()  {
+    let proof_key_path = "proof_key.bin";
+    let mut pk_slice: &[u8] = &std::fs::read(proof_key_path).unwrap();
+    println!("pk: {:?}", pk_slice);
+    println!("pk len: {:?}", pk_slice.len());
+}
+
 /////
 #[test]
 fn t() {

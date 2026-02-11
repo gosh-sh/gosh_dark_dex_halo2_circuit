@@ -167,25 +167,31 @@ impl DarkDexCircuit {
     }
 }
 
-/*pub fn generate_proof(
+pub fn generate_dark_dex_proof(
     k: u32,
+    unusable_rows: usize,
     params: &ParamsKZG<Bn256>,
     token_type: Fr,
     private_note_sum: Fr,
     sk_u: Fr,
     sk_u_commitment: Fr,
+    break_points_path: String, 
+    config_params_path: String, 
+    proof_key_path: String, 
 ) -> Result<Proof, plonk::Error> {
-    let circuit =
-        DarkDexCircuit::new(k, token_type, private_note_sum, sk_u, sk_u_commitment).create_mock();
-    let now = Instant::now();
-    let vk = keygen_vk(params, &circuit).unwrap();
-    let pk = keygen_pk(params, vk.clone(), &circuit).unwrap();
-    let public_inputs: Vec<Fr> = circuit.assigned_instances[0].iter().map(|v| *v.value()).collect();
-    let proof = Proof::create(&params, &pk, circuit, &[&public_inputs], OsRng);
-    let end = now.elapsed().as_millis();
-    println!("Dark Dex circuit proof generation time: {:?}", end);
-    proof
-}*/
+    let f = |core: &mut SinglePhaseCoreManager<Fr>, range: &RangeChip<Fr>| -> Vec<Vec<AssignedValue<Fr>>>{
+        let circuit: DarkDexCircuit = DarkDexCircuit::new(k, unusable_rows, token_type, private_note_sum, sk_u, sk_u_commitment);
+        let res = circuit.closure(core, range);
+        vec![res]
+    };
+    let data_to_hash = [sk_u_commitment, private_note_sum, token_type, sk_u];
+    let digest = poseidon_hash(&data_to_hash);
+    let mut pub_inputs: Vec<Fr> = vec![private_note_sum, token_type, digest];
+
+    let proof = Proof::create_for_curcuit_builder(k, true, 1, &params, break_points_path, config_params_path, proof_key_path, &[&pub_inputs], f);
+    
+    Ok(proof)
+}
 
 #[test]
 fn simple_test() {
