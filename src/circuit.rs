@@ -142,7 +142,7 @@ impl DarkDexCircuit {
         let len = ctx.load_witness(Fr::from(inputs.len() as u64));
         let final_hasher_result = hasher.hash_var_len_array(ctx, range, &inputs, len);
 
-        println!("final_hasher_result = {:?}", final_hasher_result.value());
+        //println!("final_hasher_result = {:?}", final_hasher_result.value());
 
         let values = [self.private_note_sum, self.token_type];
         let mut instances = ctx.assign_witnesses(values.clone());

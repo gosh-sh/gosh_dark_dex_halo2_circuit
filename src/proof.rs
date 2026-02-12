@@ -91,7 +91,7 @@ impl Proof {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
         let config_params:  BaseCircuitParams = serde_json::from_str(&contents).expect("JSON was not well-formatted");
-        println!("config_params: {:?}", config_params);
+        //println!("config_params: {:?}", config_params);
 
         let mut pk_bytes: Vec<u8> = std::fs::read(proof_key_path).unwrap();
         let mut pk_slice: &[u8] = &pk_bytes;
@@ -111,12 +111,12 @@ impl Proof {
             let value = u16::from_le_bytes([chunk[0], chunk[1]]);
             break_points.push(value as usize);
         }
-        println!("break_points: {:?}", break_points);
+       // println!("break_points: {:?}", break_points);
 
         let mut break_points_: Vec<Vec<usize>> = vec![];
         break_points_.push(break_points);
 
-        println!("break_points_: {:?}", break_points_);
+        //println!("break_points_: {:?}", break_points_);
 
         let mut builder = RangeCircuitBuilder::prover(config_params.clone(), break_points_).use_instance_columns(num_instance_columns);
         let range = RangeChip::new(lookup_bits, builder.lookup_manager().clone());
@@ -136,7 +136,7 @@ impl Proof {
     
         let proof_size = proof.len();
 
-        println!("proof: {:?}", proof);
+        //println!("proof: {:?}", proof);
 
         Self{0: proof}
 
