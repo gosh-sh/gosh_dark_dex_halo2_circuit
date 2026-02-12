@@ -414,3 +414,74 @@ fn t() {
 
     check_proof_with_instances(&params, &vk_unknown, &proof, &[&pub_inputs],  true);
 }
+
+
+#[test]
+fn full_test_more() {
+    let k = 12u32;
+    let lookup_bits = k as usize - 1;
+    let unusable_rows = 9;
+    let use_instance_columns = true;
+    let num_instance_columns  = 1;
+    let params = gen_srs(k); 
+    let verification_key_path = "verification_key.bin";
+    let proof_key_path = "proof_key.bin";
+    let break_points_path = "break_points.bin";
+    let config_params_path = "config_params.bin";
+
+    /*let f = |core: &mut SinglePhaseCoreManager<Fr>, range: &RangeChip<Fr>| -> Vec<Vec<AssignedValue<Fr>>>{
+        let circuit: DarkDexCircuit = DarkDexCircuit::default(k, unusable_rows);
+        let res = circuit.closure(core, range);
+        vec![res]
+    };
+
+    generate_keys_and_backup_for_circuit_builder(
+        k,
+        use_instance_columns,
+        num_instance_columns,
+        unusable_rows,
+        &params,
+        verification_key_path.to_string(),
+        proof_key_path.to_string(),
+        break_points_path.to_string(),
+        config_params_path.to_string(),
+        f
+    );*/
+
+    let sk_u_ = random::<u64>();
+    let token_type_ = 10u64;
+    let private_note_sum_ = 1000u64;
+    let sk_u_ = Fr::from(sk_u_);
+    let token_type_ = Fr::from(token_type_);
+    let private_note_sum_ = Fr::from(private_note_sum_);
+    let sk_u_commitment_ = poseidon_hash(&[sk_u_, Fr::zero()]);
+    let data_to_hash_ = [sk_u_commitment_, private_note_sum_, token_type_, sk_u_];
+    let digest_ = poseidon_hash(&data_to_hash_);
+    let mut pub_inputs: Vec<Fr> = vec![private_note_sum_, token_type_, digest_];
+
+
+
+    let proof = generate_dark_dex_proof(
+        k,
+        unusable_rows,
+        &params,
+        token_type_,
+        private_note_sum_,
+        sk_u_,
+        sk_u_commitment_,
+        break_points_path.to_string(), 
+        config_params_path.to_string(), 
+        proof_key_path.to_string()
+    ).unwrap();
+
+    let mut file = File::open(config_params_path.to_string()).unwrap();
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).unwrap();
+    let concrete_params:  BaseCircuitParams = serde_json::from_str(&contents).expect("JSON was not well-formatted");
+    println!("config_params: {:?}", concrete_params);
+
+    let res = proof.verify_with_vk_from_path::<BaseCircuitBuilder<Fr>>(verification_key_path.to_string(), &params, concrete_params.clone(), &[&pub_inputs]);
+
+    println!("res: {:?}", res);
+    assert!(res);
+}
