@@ -4,13 +4,13 @@ use halo2_base::{gates::circuit::BaseCircuitParams, halo2_proofs::{
     SerdeFormat, circuit::Value, halo2curves::{
         bn256::{Bn256, Fr, G1Affine},
         pairing::Engine,
-    }, plonk::{self, Circuit, ProvingKey, VerifyingKey}, poly::{
+    }, plonk::{self, Circuit, ProvingKey, VerifyingKey,  verify_proof}, poly::{
         commitment::ParamsProver,
         kzg::{
             commitment::{KZGCommitmentScheme, ParamsKZG},
             multiopen::{ProverSHPLONK, VerifierSHPLONK}, strategy::SingleStrategy,
         },
-    }, transcript::{Blake2bRead, Blake2bWrite, TranscriptReadBuffer, TranscriptWriterBuffer}
+    }, transcript::{Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer}
 }};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -159,14 +159,22 @@ impl Proof {
         pub_inputs: &[&[Fr]],
     ) -> bool  {
         let vk: VerifyingKey<G1Affine> = VerifyingKey::read::<_, C>(&mut vk_slice, SerdeFormat::RawBytesUnchecked, concrete_params).expect("Reading vkey should not fail");
-        ;
-        match panic::catch_unwind(|| {
-            check_proof_with_instances(&params, &vk, &self.0.clone(), pub_inputs,  true);
-        }) {
+        let verifier_params = params.verifier_params();
+        let strategy = SingleStrategy::new(params);
+        let binding = self.0.clone();
+        let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(binding.as_slice());
+        match verify_proof::<
+            KZGCommitmentScheme<Bn256>,
+            VerifierSHPLONK<'_, Bn256>,
+            Challenge255<G1Affine>,
+            Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
+            SingleStrategy<'_, Bn256>,
+        >(verifier_params, &vk, strategy, &[pub_inputs], &mut transcript){
             Ok(_) => true,
             Err(_) => false,
         }
     }
+        
 
    pub fn verify_with_vk_from_path<C: Circuit<Fr>>(
         &self,
