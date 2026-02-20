@@ -101,10 +101,10 @@ fn full_raw_test() {
     std::fs::write("proof_key.bin".to_string(), pk_buf).unwrap();
 
     let break_points = builder.break_points();
-    println!("break_points: {:?}", break_points.len());
+    //println!("break_points: {:?}", break_points.len());
     assert!(break_points.len() == 1);
-    println!("break_points: {:?}", break_points[0].len());
-    println!("break_points: {:?}", break_points);
+    //println!("break_points: {:?}", break_points[0].len());
+    //println!("break_points: {:?}", break_points);
     drop(builder);
 
     let break_points_ = break_points[0].clone();
@@ -113,13 +113,13 @@ fn full_raw_test() {
     // Write the u16 data as bytes in little-endian order
     for value in break_points_ {
         let v = value as u16;
-        println!("&value.to_le_bytes(): {:?}", &value.to_le_bytes()[0..2]);
+        //println!("&value.to_le_bytes(): {:?}", &value.to_le_bytes()[0..2]);
         file.write_all(&value.to_le_bytes()[0..2]).unwrap();
     }
     
     let config_params_serialized = serde_json::to_string(&config_params).unwrap();
 
-    println!("config_params_serialized: {:?}", config_params_serialized);
+   // println!("config_params_serialized: {:?}", config_params_serialized);
 
     
     let mut builder = RangeCircuitBuilder::prover(config_params.clone(), break_points).use_instance_columns(1 as usize);
@@ -144,7 +144,7 @@ fn full_raw_test() {
     
     let proof_size = proof.len();
 
-    println!("proof: {:?}", proof);
+    //println!("proof: {:?}", proof);
 
     check_proof_with_instances(&params, &vk_unknown, &proof, &[&pub_inputs],  true);
 

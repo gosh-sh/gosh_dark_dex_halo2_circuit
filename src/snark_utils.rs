@@ -155,7 +155,7 @@ pub fn generate_keys_and_backup_for_circuit_builder(
 
     let config_params = builder.calculate_params(Some(unusable_rows));
     let config_params_json = serde_json::to_string(&config_params).unwrap();
-    println!("config_params_json: {:?}", config_params_json);
+    //println!("config_params_json: {:?}", config_params_json);
     let mut file = File::create(config_params_path).unwrap();
     file.write_all(config_params_json.as_bytes()).unwrap();
     
@@ -177,10 +177,10 @@ pub fn generate_keys_and_backup_for_circuit_builder(
     std::fs::write(proof_key_path.to_string(), pk_buf).unwrap();
 
     let break_points = builder.break_points();
-    println!("break_points: {:?}", break_points.len());
+    //println!("break_points: {:?}", break_points.len());
     assert!(break_points.len() == 1);
-    println!("break_points: {:?}", break_points[0].len());
-    println!("break_points: {:?}", break_points);
+    //println!("break_points: {:?}", break_points[0].len());
+    //println!("break_points: {:?}", break_points);
     drop(builder);
 
     assert!(break_points.len() == 1);

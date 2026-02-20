@@ -68,7 +68,7 @@ impl Proof {
     
         let proof_size = proof.len();
 
-        println!("proof: {:?}", proof);
+        //println!("proof: {:?}", proof);
 
         Self{0: proof}
 

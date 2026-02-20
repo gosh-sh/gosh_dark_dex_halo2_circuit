@@ -17,6 +17,6 @@ pub fn poseidon_hash(message: &[Fr]) -> Fr {
 #[test]
 fn test() {
     let digest = poseidon_hash(&[Fr::zero()]);
-    println!("{:?}", hex::encode(digest.to_bytes()));
+    //println!("{:?}", hex::encode(digest.to_bytes()));
 }
 

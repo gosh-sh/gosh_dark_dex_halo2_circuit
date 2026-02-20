@@ -161,7 +161,7 @@ impl DarkDexCircuit {
 
         let digest = poseidon_hash(&data_to_hash);
 
-        println!("digest {:?}", digest);
+        //println!("digest {:?}", digest);
 
         vec![vec![self.private_note_sum, self.token_type, digest]]
     }
@@ -203,7 +203,7 @@ fn simple_test() {
     let private_note_sum = Fr::from(1000u64);
     let sk_u_commitment = poseidon_hash(&[sk_u, Fr::zero()]);
 
-    println!("sk_u_commitment {:?}", sk_u_commitment);
+    //println!("sk_u_commitment {:?}", sk_u_commitment);
 
     let circuit: DarkDexCircuit = DarkDexCircuit::new(k, unusable_rows, token_type, private_note_sum, sk_u, sk_u_commitment);
     let mut builder = circuit.create_mock();
