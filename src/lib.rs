@@ -1,8 +1,7 @@
 pub mod circuit;
-pub mod prover;
-pub mod verifier;
+pub mod poseidon;
+pub mod proof;
+pub mod snark_utils;
 
 #[cfg(test)]
 mod test;
-
-
