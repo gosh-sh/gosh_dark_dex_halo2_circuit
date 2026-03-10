@@ -193,6 +193,62 @@ pub fn generate_dark_dex_proof(
     Ok(proof)
 }
 
+pub fn generate_dark_dex_proof_from_bytes(
+    k: u32,
+    unusable_rows: usize,
+    params: &ParamsKZG<Bn256>,
+    token_type: Fr,
+    private_note_sum: Fr,
+    sk_u: Fr,
+    sk_u_commitment: Fr,
+    break_points_bytes: &[u8],
+    config_params_bytes: &[u8],
+    proof_key_bytes: &[u8],
+) -> Result<Proof, plonk::Error> {
+    let contents = std::str::from_utf8(config_params_bytes)
+        .expect("config_params bytes must be valid UTF-8");
+    let config_params: BaseCircuitParams =
+        serde_json::from_str(contents).expect("config_params JSON was not well-formatted");
+
+    if break_points_bytes.len() % 2 != 0 {
+        panic!("break_points bytes length must be even");
+    }
+    let mut break_points = Vec::with_capacity(break_points_bytes.len() / 2);
+    for chunk in break_points_bytes.chunks_exact(2) {
+        let value = u16::from_le_bytes([chunk[0], chunk[1]]);
+        break_points.push(value as usize);
+    }
+    let break_points_vec: Vec<Vec<usize>> = vec![break_points];
+
+    let f = |core: &mut SinglePhaseCoreManager<Fr>,
+             range: &RangeChip<Fr>|
+     -> Vec<Vec<AssignedValue<Fr>>> {
+        let circuit = DarkDexCircuit::new(
+            k, unusable_rows, token_type, private_note_sum, sk_u, sk_u_commitment,
+        );
+        let res = circuit.closure(core, range);
+        vec![res]
+    };
+
+    let data_to_hash = [sk_u_commitment, private_note_sum, token_type, sk_u];
+    let digest = poseidon_hash(&data_to_hash);
+    let pub_inputs: Vec<Fr> = vec![private_note_sum, token_type, digest];
+
+    let proof = Proof::create_for_curcuit_builder_(
+        k,
+        true,
+        1,
+        params,
+        break_points_vec,
+        config_params,
+        proof_key_bytes.to_vec(),
+        &[&pub_inputs],
+        f,
+    );
+
+    Ok(proof)
+}
+
 #[test]
 fn simple_test() {
     let k = 12u32;

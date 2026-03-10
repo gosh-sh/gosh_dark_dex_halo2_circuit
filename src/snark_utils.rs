@@ -54,6 +54,12 @@ pub fn read_kzg_params(path: String) -> ParamsKZG<Bn256> {
     params
 }
 
+pub fn read_kzg_params_from_bytes(bytes: &[u8]) -> ParamsKZG<Bn256> {
+    let mut params_slice: &[u8] = bytes;
+    ParamsKZG::<Bn256>::read_custom(&mut params_slice, SerdeFormat::RawBytesUnchecked)
+        .expect("Reading KZG params from bytes should not fail")
+}
+
 /*pub fn setup(k: u32) -> ParamsKZG<Bn256> {
     ParamsKZG::new(k)
 }
