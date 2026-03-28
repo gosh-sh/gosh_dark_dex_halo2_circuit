@@ -43,14 +43,14 @@ pub fn read_kzg_params(path: String) -> ParamsKZG<Bn256>{
     params
 }
 
-pub fn generate_proof_key(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>) -> Result<ProvingKey<G1Affine>, Error>{
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(token_type, private_note_sum,  sk, pk, g);
+pub fn generate_proof_key(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, vault_rand_val: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>) -> Result<ProvingKey<G1Affine>, Error>{
+    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(token_type, private_note_sum, vault_rand_val, sk, pk, g);
     let vk = keygen_vk(params, &circuit).unwrap();
     keygen_pk(params, vk, &circuit)
 }
 
-pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>, token_type_pub_val: u64, private_note_sum_pub_val: u64) -> Vec<u8>{
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(token_type, private_note_sum,  sk, pk, g);
+pub fn generate_proof(params: &ParamsKZG<Bn256>, token_type: Option<Fr>, private_note_sum: Option<Fr>, vault_rand_val: Option<Fr>, sk: Option<Fq>, pk: Option<Secp256k1Affine>, g: Option<Secp256k1Affine>, token_type_pub_val: u64, private_note_sum_pub_val: u64) -> Vec<u8>{
+    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(token_type, private_note_sum, vault_rand_val, sk, pk, g);
     let vk = keygen_vk(params, &circuit).unwrap();
     let pk = keygen_pk(params, vk, &circuit).unwrap();
 

@@ -37,6 +37,7 @@ use std::{
     path::Path,
     rc::Rc,
 };
+
 #[test]
 fn simple_test() {
     let sk = random::<u64>();
@@ -45,12 +46,13 @@ fn simple_test() {
     let pk = Secp256k1Affine::from(Secp256k1Affine::generator() * sk);
     let token_type = Fr::from(1u64);
     let private_note_sum = Fr::from(1000u64);
+    let vault_rand_val = Fr::from(111u64);
     
     println!("{:?}", sk);
     println!("{:?}", pk);
     println!("{:?}", g);
 
-    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(private_note_sum),  Some(sk), Some(pk), Some(g));
+    let circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::new(Some(token_type), Some(vault_rand_val), Some(private_note_sum),  Some(sk), Some(pk), Some(g));
 
     let prover = MockProver::run(18, &circuit, vec![vec![Fr::from(1u64), Fr::from(1000u64)]]).unwrap();
     assert_eq!(prover.verify(), Ok(()));
@@ -90,9 +92,11 @@ fn full_test_with_backuped_params() {
     let private_note_sum = Fr::from(1000u64);
     let private_note_sum_pub =  1000u64;
 
+    let vault_rand_val = Fr::from(111u64);
+
     let params = read_kzg_params("kzg_params.bin".to_string());
 
-    let proof = generate_proof(&params, Some(token_type), Some(private_note_sum), Some(sk), Some(pk), Some(g), token_type_pub, private_note_sum_pub);
+    let proof = generate_proof(&params, Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g), token_type_pub, private_note_sum_pub);
 
     std::fs::write("proof.bin".to_string(), proof.clone()).unwrap();
 
@@ -114,6 +118,7 @@ fn full_test() {
     let token_type_pub = 1u64;
     let private_note_sum = Fr::from(1000u64);
     let private_note_sum_pub =  1000u64;
+    let vault_rand_val = Fr::from(111u64);
     let k = 18;
     let params: ParamsKZG<Bn256> = setup(k);
 
@@ -127,7 +132,7 @@ fn full_test() {
     let params_new  = ParamsKZG::<Bn256>::read_custom(&mut params_slice, SerdeFormat::RawBytesUnchecked).expect("Reading vkey should not fail");
 
     
-    let proof = generate_proof(&params_new, Some(token_type), Some(private_note_sum), Some(sk), Some(pk), Some(g), token_type_pub, private_note_sum_pub);
+    let proof = generate_proof(&params_new, Some(token_type), Some(private_note_sum), Some(vault_rand_val), Some(sk), Some(pk), Some(g), token_type_pub, private_note_sum_pub);
     println!("proof len = {:?}", proof.len());
 
     let empty_circuit: DarkDexCircuit<Fr> = DarkDexCircuit::<Fr>::default();
